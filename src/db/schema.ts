@@ -41,4 +41,4 @@ export const progress = sqliteTable('progress', {
   chapterPath: text('chapter_path').notNull(),
   positionSec: real('position_sec').notNull().default(0),
   updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
-}, (t) => [primaryKey({ columns: [t.userId, t.bookId] })]);
+}, (t) => [primaryKey({ columns: [t.userId, t.bookId, t.chapterPath] })]);

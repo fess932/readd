@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { api, type LibraryBook } from '$lib/api';
   import { player, playBook } from '$lib/playerState.svelte';
   import { toast } from '$lib/toast.svelte';
@@ -124,18 +125,20 @@
         {@const remaining = remainingTime(book)}
         <div class="book-row" class:active={isActive(book)}>
 
-          {#if book.coverPath}
-            <img src="/uploads/{book.coverPath}" alt={book.title} class="row-cover" />
-          {:else}
-            <div class="row-cover placeholder"></div>
-          {/if}
+          <a href="/book/{book.id}" class="row-cover-link" tabindex="-1" onclick={() => resume(book)}>
+            {#if book.coverPath}
+              <img src="/uploads/{book.coverPath}" alt={book.title} class="row-cover" />
+            {:else}
+              <div class="row-cover placeholder"></div>
+            {/if}
+          </a>
 
           <div class="row-body">
             <div class="row-top">
-              <div class="row-info" onclick={() => resume(book)} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && resume(book)}>
+              <a href="/book/{book.id}" class="row-info" onclick={() => resume(book)}>
                 <p class="row-title">{book.title}</p>
                 <p class="row-author">{book.author}{book.narrator ? ` · ${book.narrator}` : ''}</p>
-              </div>
+              </a>
               <div class="row-actions">
                 <button class="btn-play" onclick={() => resume(book)} title={isPlaying(book) ? 'Пауза' : 'Играть'}>
                   {isPlaying(book) ? '⏸' : '▶'}
@@ -215,14 +218,16 @@
   }
   .book-row.active { border-color: #444; }
 
-  .row-cover { width: 64px; height: 64px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+  .row-cover-link { flex-shrink: 0; display: block; }
+  .row-cover { width: 64px; height: 64px; border-radius: 6px; object-fit: cover; display: block; }
   .row-cover.placeholder { background: linear-gradient(135deg, #2a2a2a, #1a1a1a); }
 
   .row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 
   .row-top { display: flex; align-items: flex-start; gap: 0.5rem; }
-  .row-info { flex: 1; min-width: 0; cursor: pointer; }
-  .row-title { font-weight: 500; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-info { flex: 1; min-width: 0; text-decoration: none; color: inherit; }
+  .row-info:hover .row-title { color: #fff; }
+  .row-title { font-weight: 500; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.1s; }
   .row-author { color: #666; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 
   .row-actions { display: flex; gap: 0.35rem; flex-shrink: 0; }

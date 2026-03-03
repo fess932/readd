@@ -1,14 +1,12 @@
 <script lang="ts">
-  import { player, currentChapterPath } from './playerState.svelte';
+  import { player, currentChapterPath, saveProgress } from './playerState.svelte';
   import { api } from './api';
 
   let audioEl = $state<HTMLAudioElement | null>(null);
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
-  let lastSaved = 0;
-  let showChapters = $state(false);
   let seekBarEl = $state<HTMLElement | null>(null);
   let dragging = $state(false);
-  let switching = false; // true пока грузится новая глава — игнорируем pause
+  let switching = $state(false); // true пока грузится новая глава — игнорируем pause
 
   function fmt(s: number): string {
     if (!isFinite(s) || s < 0) return '0:00';
@@ -20,23 +18,12 @@
       : `${m}:${String(sec).padStart(2, '0')}`;
   }
 
-  function saveProgress() {
-    const path = currentChapterPath();
-    if (!player.book || !path) return;
-    api.progress.save(player.book.id, {
-      chapterPath: path,
-      positionSec: player.currentTime,
-      chapterDuration: player.duration || undefined,
-    }).catch(() => {});
-  }
-
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      if (Date.now() - lastSaved > 4000) { saveProgress(); lastSaved = Date.now(); }
-    }, 5000);
+    saveTimer = setTimeout(() => { saveProgress(); }, 1000);
   }
 
+  // Смена главы — загружаем новый файл
   $effect(() => {
     const path = currentChapterPath();
     if (!audioEl || !path) return;
@@ -48,6 +35,16 @@
     }
   });
 
+  // Управляем воспроизведением через player.playing
+  $effect(() => {
+    if (!audioEl || switching) return;
+    if (player.playing) {
+      audioEl.play().catch(() => { player.playing = false; });
+    } else {
+      audioEl.pause();
+    }
+  });
+
   function onLoadedMetadata() {
     if (!audioEl) return;
     player.duration = audioEl.duration;
@@ -55,7 +52,7 @@
       audioEl.currentTime = player.positionSec;
       player.positionSec = 0;
     }
-    // После загрузки новой главы — воспроизводим если нужно
+    // play() сразу здесь — seek уже применён, эффект придёт позже
     if (player.playing) audioEl.play().catch(() => {});
     switching = false;
   }
@@ -138,13 +135,6 @@
     player.playing = true;
   }
 
-  function goToChapter(idx: number) {
-    player.chapterIdx = idx;
-    player.positionSec = 0;
-    player.playing = true;
-    showChapters = false;
-  }
-
   function togglePlay() {
     if (!player.book) return;
     player.playing = !player.playing;
@@ -155,7 +145,6 @@
   const progress     = $derived(player.duration > 0 ? player.currentTime / player.duration : 0);
   const remaining    = $derived(player.duration > 0 ? player.duration - player.currentTime : 0);
   const chapterCount = $derived(player.book?.chapters.length ?? 0);
-  const chapterNum   = $derived(player.chapterIdx + 1);
 </script>
 
 <audio
@@ -168,31 +157,6 @@
 ></audio>
 
 {#if player.book}
-  <!-- Список глав -->
-  {#if showChapters && chapterCount > 1}
-    <div class="chapters-panel">
-      <div class="chapters-header">
-        <span>Главы</span>
-        <button onclick={() => showChapters = false}>✕</button>
-      </div>
-      <div class="chapters-list">
-        {#each player.book.chapters as ch, i (ch.id)}
-          <button
-            class="chapter-item"
-            class:active={i === player.chapterIdx}
-            onclick={() => goToChapter(i)}
-          >
-            <span class="ch-num">{i + 1}</span>
-            <span class="ch-name">{ch.filePath.split('/').pop()?.replace(/\.[^.]+$/, '') ?? `Глава ${i + 1}`}</span>
-            {#if ch.durationSec}
-              <span class="ch-dur">{fmt(ch.durationSec)}</span>
-            {/if}
-          </button>
-        {/each}
-      </div>
-    </div>
-  {/if}
-
   <div class="player">
     <!-- Обложка + инфо -->
     <div class="player-left">
@@ -213,11 +177,6 @@
         <button class="ctrl-btn" onclick={prevChapter} disabled={player.chapterIdx === 0} title="Предыдущая">⏮</button>
         <button class="ctrl-btn play-btn" onclick={togglePlay}>{player.playing ? '⏸' : '▶'}</button>
         <button class="ctrl-btn" onclick={nextChapter} disabled={player.chapterIdx >= chapterCount - 1} title="Следующая">⏭</button>
-        {#if chapterCount > 1}
-          <button class="ctrl-btn chapters-btn" class:active={showChapters} onclick={() => showChapters = !showChapters} title="Главы">
-            {chapterNum}/{chapterCount}
-          </button>
-        {/if}
       </div>
 
       <!-- Seekbar с drag-to-seek -->
@@ -251,87 +210,6 @@
 {/if}
 
 <style>
-  /* Список глав */
-  .chapters-panel {
-    position: fixed;
-    bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(400px, 100vw);
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    border-radius: 12px 12px 0 0;
-    z-index: 60;
-    display: flex;
-    flex-direction: column;
-    max-height: 50vh;
-  }
-
-  .chapters-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid #2a2a2a;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #888;
-    flex-shrink: 0;
-  }
-  .chapters-header button {
-    background: none;
-    border: none;
-    color: #555;
-    cursor: pointer;
-    font-size: 0.8rem;
-    padding: 0.2rem 0.4rem;
-  }
-  .chapters-header button:hover { color: #fff; }
-
-  .chapters-list {
-    overflow-y: auto;
-    flex: 1;
-  }
-
-  .chapter-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    width: 100%;
-    padding: 0.6rem 1rem;
-    background: none;
-    border: none;
-    color: #888;
-    cursor: pointer;
-    text-align: left;
-    font-size: 0.85rem;
-    transition: background 0.1s, color 0.1s;
-  }
-  .chapter-item:hover { background: #222; color: #fff; }
-  .chapter-item.active { color: #fff; background: #252525; }
-  .chapter-item.active .ch-num { color: #fff; }
-
-  .ch-num {
-    font-size: 0.75rem;
-    color: #444;
-    width: 2rem;
-    text-align: right;
-    flex-shrink: 0;
-    font-variant-numeric: tabular-nums;
-  }
-  .ch-name {
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .ch-dur {
-    font-size: 0.72rem;
-    color: #444;
-    flex-shrink: 0;
-    font-variant-numeric: tabular-nums;
-  }
-
   /* Плеер */
   .player {
     position: fixed;
@@ -393,15 +271,6 @@
   .ctrl-btn:hover:not(:disabled) { color: #fff; }
   .ctrl-btn:disabled { opacity: 0.25; cursor: default; }
   .play-btn { font-size: 1.3rem; color: #fff; }
-
-  .chapters-btn {
-    font-size: 0.72rem;
-    color: #555;
-    border: 1px solid #2a2a2a !important;
-    padding: 0.1rem 0.5rem !important;
-    border-radius: 4px;
-  }
-  .chapters-btn.active, .chapters-btn:hover { color: #fff !important; border-color: #555 !important; }
 
   /* Seekbar */
   .seek-wrap {

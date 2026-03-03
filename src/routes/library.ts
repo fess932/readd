@@ -38,6 +38,7 @@ export const libraryRoutes = new Elysia({ prefix: '/api/library' })
       const prog = db.select()
         .from(progress)
         .where(and(eq(progress.userId, user.id), eq(progress.bookId, book.id)))
+        .orderBy(desc(progress.updatedAt))
         .get() ?? null;
 
       return { ...book, chapters: bookChapters, progress: prog };
@@ -79,7 +80,9 @@ export const libraryRoutes = new Elysia({ prefix: '/api/library' })
       .from(chapters).where(eq(chapters.bookId, bookId)).orderBy(asc(chapters.sortOrder)).all();
 
     const prog = db.select().from(progress)
-      .where(and(eq(progress.userId, user.id), eq(progress.bookId, bookId))).get() ?? null;
+      .where(and(eq(progress.userId, user.id), eq(progress.bookId, bookId)))
+      .orderBy(desc(progress.updatedAt))
+      .get() ?? null;
 
     return { ...row, chapters: bookChapters, progress: prog };
   })

@@ -30,31 +30,32 @@ export const progressRoutes = new Elysia({ prefix: '/api/progress' })
     return row ?? null;
   })
 
-  // Прогресс конкретной книги
+  // Прогресс всех глав книги
   .get('/:bookId', ({ params, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Unauthorized' }; }
 
     return db
-      .select()
+      .select({ chapterPath: progress.chapterPath, positionSec: progress.positionSec })
       .from(progress)
       .where(and(eq(progress.userId, user.id), eq(progress.bookId, Number(params.bookId))))
-      .get() ?? null;
+      .all();
   })
 
-  // Сохранить позицию + обновить длительность главы если передана
+  // Сохранить позицию конкретной главы
   .post('/:bookId', ({ params, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Unauthorized' }; }
 
     const bookId = Number(params.bookId);
     const { chapterPath, positionSec, chapterDuration } = body;
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
     const existing = db.select().from(progress)
-      .where(and(eq(progress.userId, user.id), eq(progress.bookId, bookId))).get();
+      .where(and(eq(progress.userId, user.id), eq(progress.bookId, bookId), eq(progress.chapterPath, chapterPath))).get();
 
     if (existing) {
       db.update(progress)
-        .set({ chapterPath, positionSec, updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 19) })
-        .where(and(eq(progress.userId, user.id), eq(progress.bookId, bookId)))
+        .set({ positionSec, updatedAt: now })
+        .where(and(eq(progress.userId, user.id), eq(progress.bookId, bookId), eq(progress.chapterPath, chapterPath)))
         .run();
     } else {
       db.insert(progress).values({ userId: user.id, bookId, chapterPath, positionSec }).run();

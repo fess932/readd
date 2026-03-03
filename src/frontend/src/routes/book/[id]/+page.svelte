@@ -2,8 +2,8 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { api, type LibraryBook, type Chapter } from '$lib/api';
-  import { player, playBook } from '$lib/playerState.svelte';
+  import { api, type LibraryBook, type Chapter, type ChapterProgress } from '$lib/api';
+  import { player, playBook, saveProgress, getChapterPos, setChapterPos } from '$lib/playerState.svelte';
   import { toast } from '$lib/toast.svelte';
 
   let book = $state<LibraryBook | null>(null);
@@ -46,17 +46,21 @@
     return Math.min(1, (b.progress!.positionSec) / dur);
   }
 
-  // Если книга сейчас играет — берём реальное время из плеера
+  // Для текущей главы — живое время, для остальных — позиция из карты
   function liveChapterProgress(b: LibraryBook, ch: Chapter, idx: number): number {
     if (player.book?.id === b.id && player.chapterIdx === idx && player.duration > 0) {
       return Math.min(1, player.currentTime / player.duration);
     }
-    return chapterProgress(b, ch, idx);
+    const pos = getChapterPos(ch.filePath);
+    if (pos > 0 && ch.durationSec) return Math.min(1, pos / ch.durationSec);
+    return 0;
   }
 
   function playChapter(idx: number) {
     if (!book) return;
-    playBook(book, idx, idx === progressChapterIdx(book) ? (book.progress?.positionSec ?? 0) : 0);
+    saveProgress();
+    const ch = book.chapters[idx];
+    playBook(book, idx, getChapterPos(ch.filePath));
   }
 
   function isActive(idx: number): boolean {
@@ -65,7 +69,20 @@
 
   onMount(async () => {
     try {
-      book = await api.library.get(bookId);
+      const [bookData, positions] = await Promise.all([
+        api.library.get(bookId),
+        api.progress.get(bookId),
+      ]);
+      book = bookData;
+      for (const p of positions) setChapterPos(p.chapterPath, p.positionSec);
+      // Загружаем книгу в плеер (без автоплея) если ещё не там
+      if (player.book?.id !== bookId) {
+        const chapterIdx = book.progress
+          ? book.chapters.findIndex(c => c.filePath === book.progress!.chapterPath)
+          : 0;
+        playBook(book, Math.max(0, chapterIdx), book.progress?.positionSec ?? 0);
+        player.playing = false;
+      }
     } catch (e: any) {
       if (e.message?.includes('Not found')) goto('/library');
       else error = e.message;
@@ -92,7 +109,14 @@
         <p class="author">{book.author}</p>
         {#if book.narrator}<p class="narrator">Читает: {book.narrator}</p>{/if}
         <p class="meta">{book.chapters.length} глав</p>
-        <a href="/library" class="back">← Библиотека</a>
+        <div class="book-actions">
+          {#if player.book?.id === bookId && player.playing}
+            <button class="btn-resume playing" onclick={() => { player.playing = false; }}>⏸ Пауза</button>
+          {:else}
+            <button class="btn-resume" onclick={() => playChapter(progressChapterIdx(book) >= 0 ? progressChapterIdx(book) : 0)}>▶ {book.progress ? 'Продолжить' : 'Слушать'}</button>
+          {/if}
+          <a href="/library" class="back">← Библиотека</a>
+        </div>
       </div>
     </div>
 
@@ -100,7 +124,7 @@
       {#each book.chapters as ch, i (ch.id)}
         {@const pct = liveChapterProgress(book, ch, i)}
         {@const active = isActive(i)}
-        {@const started = chapterProgress(book, ch, i) > 0}
+        {@const started = pct > 0}
         <button class="chapter" class:active onclick={() => playChapter(i)}>
           <div class="ch-left">
             <span class="ch-num" class:playing={active && player.playing}>
@@ -119,10 +143,10 @@
               <div class="ch-progress-fill" style="width: {pct * 100}%"
                 class:complete={pct >= 0.99}></div>
             </div>
-            {#if started && pct < 0.99}
-              <span class="ch-remaining">−{fmt((ch.durationSec ?? 0) * (1 - pct))}</span>
-            {:else if pct >= 0.99}
+            {#if pct >= 0.99}
               <span class="ch-done">✓</span>
+            {:else if ch.durationSec}
+              <span class="ch-remaining">−{fmt(ch.durationSec * (1 - pct))}</span>
             {/if}
           </div>
         </button>
@@ -157,6 +181,15 @@
   .author { color: #888; font-size: 0.9rem; margin-bottom: 0.1rem; }
   .narrator { color: #555; font-size: 0.8rem; margin-bottom: 0.1rem; }
   .meta { color: #444; font-size: 0.8rem; margin: 0.5rem 0; }
+  .book-actions { display: flex; align-items: center; gap: 1rem; margin-top: 0.75rem; }
+  .btn-resume {
+    background: #fff; color: #000;
+    border: none; border-radius: 20px;
+    padding: 0.4rem 1.1rem; font-size: 0.85rem; font-weight: 600;
+    cursor: pointer; transition: opacity 0.1s;
+  }
+  .btn-resume:hover { opacity: 0.85; }
+  .btn-resume.playing { background: #2a2a2a; color: #fff; }
   .back { color: #555; font-size: 0.85rem; text-decoration: none; }
   .back:hover { color: #fff; }
 

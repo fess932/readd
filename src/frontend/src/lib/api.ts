@@ -1,5 +1,10 @@
 import { auth } from './auth.svelte';
 
+export interface ChapterProgress {
+  chapterPath: string;
+  positionSec: number;
+}
+
 // В dev-режиме загрузка идёт напрямую на бэкенд, минуя Vite proxy
 // (http-proxy зависает на повторных больших загрузках).
 // В prod фронт и бэкенд на одном сервере — relative URL работает.
@@ -66,7 +71,7 @@ export const api = {
   },
   progress: {
     last: () => request<LastProgress | null>('/api/progress/last'),
-    get: (bookId: number) => request<Progress | null>(`/api/progress/${bookId}`),
+    get: (bookId: number) => request<ChapterProgress[]>(`/api/progress/${bookId}`),
     save: (bookId: number, body: { chapterPath: string; positionSec: number; chapterDuration?: number }) =>
       request<{ ok: boolean }>(`/api/progress/${bookId}`, { method: 'POST', body: JSON.stringify(body) }),
   },

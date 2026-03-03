@@ -33,3 +33,27 @@ export function currentChapterPath(): string | null {
   if (!player.book) return null;
   return player.book.chapters[player.chapterIdx]?.filePath ?? null;
 }
+
+// Позиции по каждой главе — реактивный объект чтобы UI обновлялся
+const chapterPositions = $state<Record<string, number>>({});
+
+export function setChapterPos(path: string, time: number) {
+  chapterPositions[path] = time;
+}
+
+export function getChapterPos(path: string): number {
+  return chapterPositions[path] ?? 0;
+}
+
+export function saveProgress() {
+  const path = currentChapterPath();
+  if (!player.book || !path) return;
+  setChapterPos(path, player.currentTime);
+  import('./api').then(({ api }) => {
+    api.progress.save(player.book!.id, {
+      chapterPath: path,
+      positionSec: player.currentTime,
+      chapterDuration: player.duration || undefined,
+    }).catch(() => {});
+  });
+}
