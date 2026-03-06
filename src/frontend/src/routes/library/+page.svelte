@@ -125,7 +125,7 @@
         {@const remaining = remainingTime(book)}
         <div class="book-row" class:active={isActive(book)}>
 
-          <a href="/book/{book.id}" class="row-cover-link" tabindex="-1" onclick={() => resume(book)}>
+          <a href="/book/{book.id}" class="row-cover-link" tabindex="-1" onclick={() => { if (!isActive(book)) resume(book); }}>
             {#if book.coverPath}
               <img src="/uploads/{book.coverPath}" alt={book.title} class="row-cover" />
             {:else}
@@ -135,34 +135,20 @@
 
           <div class="row-body">
             <div class="row-top">
-              <a href="/book/{book.id}" class="row-info" onclick={() => resume(book)}>
+              <a href="/book/{book.id}" class="row-info" onclick={() => { if (!isActive(book)) resume(book); }}>
                 <p class="row-title">{book.title}</p>
                 <p class="row-author">{book.author}{book.narrator ? ` · ${book.narrator}` : ''}</p>
               </a>
               <div class="row-actions">
-                <button class="btn-play" onclick={() => resume(book)} title={isPlaying(book) ? 'Пауза' : 'Играть'}>
-                  {isPlaying(book) ? '⏸' : '▶'}
-                </button>
                 <button class="btn-remove" onclick={() => confirmRemoveId = book.id} disabled={removingId === book.id} title="Убрать из библиотеки">✕</button>
               </div>
             </div>
 
             <!-- Прогресс строка -->
             <div class="progress-row">
-              <button class="progress-track" type="button"
-                aria-label="Прогресс книги, нажмите для перемотки"
-                onclick={(e) => {
-                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                  const p = (e.clientX - rect.left) / rect.width;
-                  const chIdx = Math.floor(p * book.chapters.length);
-                  playBook(book, Math.min(chIdx, book.chapters.length - 1), 0);
-                }}
-                onkeydown={(e) => {
-                  if (e.key === 'ArrowRight') playBook(book, Math.min(player.chapterIdx + 1, book.chapters.length - 1), 0);
-                  if (e.key === 'ArrowLeft')  playBook(book, Math.max(player.chapterIdx - 1, 0), 0);
-                }}>
+              <div class="progress-track">
                 <div class="progress-fill" style="width: {pct * 100}%"></div>
-              </button>
+              </div>
               <div class="progress-meta">
                 {#if book.chapters.length > 1}
                   <span class="chapters-info">
@@ -241,12 +227,8 @@
   .progress-row { display: flex; flex-direction: column; gap: 3px; }
   .progress-track {
     height: 3px; background: #2a2a2a; border-radius: 2px;
-    cursor: pointer; position: relative; overflow: hidden;
-    border: none; padding: 0; width: 100%; display: block;
-    transition: height 0.1s;
+    position: relative; overflow: hidden; width: 100%;
   }
-  .progress-track:hover { height: 5px; }
-  .progress-track:focus-visible { outline: 1px solid #555; outline-offset: 2px; }
   .progress-fill { height: 100%; background: #555; border-radius: 2px; transition: width 0.3s; }
   .book-row.active .progress-fill { background: #fff; }
 
