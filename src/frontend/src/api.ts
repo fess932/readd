@@ -1,13 +1,10 @@
-import { auth } from './auth.svelte';
+import { auth } from './stores/auth';
 
 export interface ChapterProgress {
   chapterPath: string;
   positionSec: number;
 }
 
-// В dev-режиме загрузка идёт напрямую на бэкенд, минуя Vite proxy
-// (http-proxy зависает на повторных больших загрузках).
-// В prod фронт и бэкенд на одном сервере — relative URL работает.
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3000' : '';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -53,7 +50,7 @@ export const api = {
             try {
               const body = JSON.parse(xhr.responseText);
               if (body?.error) msg = body.error;
-            } catch { /* не JSON — оставляем статус-строку */ }
+            } catch { /* не JSON */ }
             reject(new Error(msg));
           }
         };

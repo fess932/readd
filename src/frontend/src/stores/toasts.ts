@@ -1,3 +1,5 @@
+import { reactive } from 'vue';
+
 export interface Toast {
   id: number;
   type: 'success' | 'error' | 'info';
@@ -5,7 +7,7 @@ export interface Toast {
 }
 
 let _id = 0;
-export const toasts = $state<Toast[]>([]);
+export const toasts = reactive<Toast[]>([]);
 
 export function toast(type: Toast['type'], text: string, ms = 4000) {
   const id = ++_id;

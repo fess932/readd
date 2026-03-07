@@ -1,3 +1,5 @@
+import { reactive } from 'vue';
+
 export interface Chapter {
   id: number;
   filePath: string;
@@ -13,13 +15,13 @@ export interface PlayerBook {
   chapters: Chapter[];
 }
 
-export const player = $state({
+export const player = reactive({
   book: null as PlayerBook | null,
   chapterIdx: 0,
   positionSec: 0,
   playing: false,
-  duration: 0,        // длительность текущей главы (от <audio>)
-  currentTime: 0,     // текущее время (от <audio>)
+  duration: 0,
+  currentTime: 0,
 });
 
 export function playBook(book: PlayerBook, chapterIdx = 0, positionSec = 0) {
@@ -34,8 +36,7 @@ export function currentChapterPath(): string | null {
   return player.book.chapters[player.chapterIdx]?.filePath ?? null;
 }
 
-// Позиции по каждой главе — реактивный объект чтобы UI обновлялся
-const chapterPositions = $state<Record<string, number>>({});
+const chapterPositions = reactive<Record<string, number>>({});
 
 export function setChapterPos(path: string, time: number) {
   chapterPositions[path] = time;
@@ -45,20 +46,24 @@ export function getChapterPos(path: string): number {
   return chapterPositions[path] ?? 0;
 }
 
-export function saveProgress() {
+let lastSaveTime = 0;
+
+export function saveProgress(force = false) {
+  const now = Date.now();
+  if (!force && now - lastSaveTime < 2000) return;
+  lastSaveTime = now;
   const path = currentChapterPath();
-  console.log("save progress", path, player.book);
   if (!player.book || !path) return;
-  setChapterPos(path, player.currentTime);
-  import('./api').then(({ api }) => {
-    api.progress.save(player.book!.id, {
+  // Capture eagerly; fall back to last known in-memory pos if audio hasn't loaded yet (currentTime = 0)
+  const time = player.currentTime || getChapterPos(path);
+  const bookId = player.book.id;
+  const duration = player.duration;
+  setChapterPos(path, time);
+  import('../api').then(({ api }) => {
+    api.progress.save(bookId, {
       chapterPath: path,
-      positionSec: player.currentTime,
-      chapterDuration: player.duration || undefined,
-    }).catch((err) => {
-      console.error("save progress error", err);
-    }).finally(() => {
-      console.log("save progress done");
-    });
+      positionSec: time,
+      chapterDuration: duration || undefined,
+    }).catch(console.error);
   });
 }
