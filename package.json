@@ -6,8 +6,10 @@
   ],
   "scripts": {
     "dev": "bun run dev.ts",
-    "build": "bun run --cwd src/frontend build",
-    "start": "bun run src/index.ts",
+    "build": "bun run --cwd src/frontend build && cargo build --release --manifest-path server/Cargo.toml",
+    "start": "cargo run --release --manifest-path server/Cargo.toml",
+    "server:dev": "cargo run --manifest-path server/Cargo.toml",
+    "server:build": "cargo build --release --manifest-path server/Cargo.toml",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

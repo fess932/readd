@@ -2,13 +2,24 @@ import { join } from "path";
 
 const root = import.meta.dir;
 
-const backend = Bun.spawn(["bun", "src/index.ts"], {
+// Build the Rust server first (incremental — fast if no changes)
+const build = Bun.spawnSync(["cargo", "build", "--manifest-path", join(root, "server/Cargo.toml")], {
+  stdout: "inherit",
+  stderr: "inherit",
+});
+if (build.exitCode !== 0) {
+  process.stderr.write("\n\x1b[31m[dev] Rust build failed.\x1b[0m\n\n");
+  process.exit(1);
+}
+
+const serverBin = join(root, "server/target/debug/readd-server");
+
+const backend = Bun.spawn([serverBin], {
   stdout: "inherit",
   stderr: "inherit",
   cwd: root,
 });
 
-// Если бэкенд упал — показываем понятную ошибку и выходим
 backend.exited.then((code) => {
   if (code !== 0) {
     process.stderr.write(
