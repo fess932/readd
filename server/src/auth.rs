@@ -16,7 +16,7 @@ pub struct Claims {
     pub name: String,
     #[serde(rename = "isAdmin")]
     pub is_admin: bool,
-    pub exp: usize,
+    pub exp: Option<usize>,
 }
 
 pub fn encode_token(
@@ -29,7 +29,7 @@ pub fn encode_token(
         .duration_since(UNIX_EPOCH)?
         .as_secs() as usize
         + 30 * 24 * 3600;
-    let claims = Claims { id, name: name.to_string(), is_admin, exp };
+    let claims = Claims { id, name: name.to_string(), is_admin, exp: Some(exp) };
     let token = jsonwebtoken::encode(
         &Header::default(),
         &claims,
@@ -41,6 +41,7 @@ pub fn encode_token(
 pub fn decode_token(token: &str, secret: &str) -> Option<Claims> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = false; // tokens from old TS server have no exp
+    validation.required_spec_claims = std::collections::HashSet::new(); // don't require exp to be present
     jsonwebtoken::decode::<Claims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),

@@ -50,11 +50,13 @@ async fn main() -> anyhow::Result<()> {
 
     db::setup(&pool).await?;
 
-    let state = Arc::new(AppState { pool, jwt_secret, uploads_dir });
+    let state = Arc::new(AppState { pool, jwt_secret, uploads_dir: uploads_dir.clone() });
 
     let dist_fallback = dist_dir.join("index.html");
     let app = Router::new()
         .merge(routes::api_router(Arc::clone(&state)))
+        // ServeDir handles Range requests automatically — required for audio seeking
+        .nest_service("/uploads", ServeDir::new(&uploads_dir))
         .layer(CorsLayer::permissive())
         .layer(DefaultBodyLimit::disable())
         .fallback_service(
