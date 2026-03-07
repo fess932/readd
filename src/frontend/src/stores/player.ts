@@ -48,14 +48,14 @@ export function getChapterPos(path: string): number {
 
 let lastSaveTime = 0;
 
-export function saveProgress(force = false) {
+export function saveProgress(force = false, overrideTime?: number) {
   const now = Date.now();
   if (!force && now - lastSaveTime < 2000) return;
   lastSaveTime = now;
   const path = currentChapterPath();
   if (!player.book || !path) return;
   // Capture eagerly; fall back to last known in-memory pos if audio hasn't loaded yet (currentTime = 0)
-  const time = player.currentTime || getChapterPos(path);
+  const time = overrideTime ?? (player.currentTime || getChapterPos(path));
   const bookId = player.book.id;
   const duration = player.duration;
   setChapterPos(path, time);

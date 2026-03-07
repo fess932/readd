@@ -121,7 +121,7 @@ function onPlay() {
 }
 
 function onEnded() {
-  saveProgress(true);
+  saveProgress(true, player.duration > 5 ? player.duration - 5 : 0);
   if (player.book && player.chapterIdx < player.book.chapters.length - 1) {
     player.chapterIdx++;
     player.positionSec = 0;
