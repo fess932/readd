@@ -19,12 +19,12 @@
   }
 
   function scheduleSave() {
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { saveProgress(); }, 1000);
+    console.log("schedule save", saveTimer)
+    saveProgress()
   }
 
   // Смена главы — загружаем новый файл
-  $effect(() => {
+    $effect(() => {
     const path = currentChapterPath();
     if (!audioEl || !path) return;
     const src = `/uploads/${path}`;
@@ -50,6 +50,7 @@
     player.duration = audioEl.duration;
     if (player.positionSec > 0 && player.positionSec < audioEl.duration - 1) {
       audioEl.currentTime = player.positionSec;
+      player.currentTime = player.positionSec; // держим currentTime в синхронизации до первого timeupdate
       player.positionSec = 0;
     }
     // play() сразу здесь — seek уже применён, эффект придёт позже

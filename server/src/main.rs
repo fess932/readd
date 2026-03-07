@@ -1,36 +1,34 @@
+use axum::{extract::DefaultBodyLimit, Router};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
-use axum::{Router, extract::DefaultBodyLimit};
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteJournalMode, SqliteSynchronous};
-use std::str::FromStr;
-
-mod error;
-mod state;
-mod db;
+use tower_http::trace::TraceLayer;
 mod auth;
+mod db;
+mod error;
 mod routes;
+mod state;
 
 use state::AppState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
-        )
+        .with_env_filter("debug")
+        .with_target(false)
+        .with_level(true)
+        .with_ansi(true)
         .compact()
         .init();
 
     let db_path = std::env::var("DATABASE_URL").unwrap_or_else(|_| "readd.db".to_string());
-    let jwt_secret =
-        std::env::var("JWT_SECRET").unwrap_or_else(|_| "readd-secret-key".to_string());
+    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "readd-secret-key".to_string());
     let uploads_dir =
         PathBuf::from(std::env::var("UPLOADS_DIR").unwrap_or_else(|_| "uploads".to_string()));
-    let dist_dir =
-        PathBuf::from(std::env::var("DIST_DIR").unwrap_or_else(|_| "dist".to_string()));
+    let dist_dir = PathBuf::from(std::env::var("DIST_DIR").unwrap_or_else(|_| "dist".to_string()));
 
     tokio::fs::create_dir_all(&uploads_dir).await?;
 
@@ -50,18 +48,22 @@ async fn main() -> anyhow::Result<()> {
 
     db::setup(&pool).await?;
 
-    let state = Arc::new(AppState { pool, jwt_secret, uploads_dir: uploads_dir.clone() });
+    let state = Arc::new(AppState {
+        pool,
+        jwt_secret,
+        uploads_dir: uploads_dir.clone(),
+    });
 
     let dist_fallback = dist_dir.join("index.html");
     let app = Router::new()
+        .layer(TraceLayer::new_for_http())
         .merge(routes::api_router(Arc::clone(&state)))
         // ServeDir handles Range requests automatically — required for audio seeking
         .nest_service("/uploads", ServeDir::new(&uploads_dir))
+        // .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .layer(DefaultBodyLimit::disable())
-        .fallback_service(
-            ServeDir::new(&dist_dir).fallback(ServeFile::new(dist_fallback)),
-        );
+        .fallback_service(ServeDir::new(&dist_dir).fallback(ServeFile::new(dist_fallback)));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     tracing::info!("Server started on port 3000");

@@ -1,5 +1,4 @@
 use axum::{
-    async_trait,
     extract::FromRequestParts,
     http::{request::Parts, HeaderMap},
 };
@@ -19,17 +18,14 @@ pub struct Claims {
     pub exp: Option<usize>,
 }
 
-pub fn encode_token(
-    id: i64,
-    name: &str,
-    is_admin: bool,
-    secret: &str,
-) -> anyhow::Result<String> {
-    let exp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)?
-        .as_secs() as usize
-        + 30 * 24 * 3600;
-    let claims = Claims { id, name: name.to_string(), is_admin, exp: Some(exp) };
+pub fn encode_token(id: i64, name: &str, is_admin: bool, secret: &str) -> anyhow::Result<String> {
+    let exp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as usize + 30 * 24 * 3600;
+    let claims = Claims {
+        id,
+        name: name.to_string(),
+        is_admin,
+        exp: Some(exp),
+    };
     let token = jsonwebtoken::encode(
         &Header::default(),
         &claims,
@@ -58,7 +54,6 @@ fn extract_bearer(headers: &HeaderMap) -> Option<&str> {
         .and_then(|v| v.strip_prefix("Bearer "))
 }
 
-#[async_trait]
 impl FromRequestParts<Arc<AppState>> for Claims {
     type Rejection = AppError;
 

@@ -47,6 +47,7 @@ export function getChapterPos(path: string): number {
 
 export function saveProgress() {
   const path = currentChapterPath();
+  console.log("save progress", path, player.book);
   if (!player.book || !path) return;
   setChapterPos(path, player.currentTime);
   import('./api').then(({ api }) => {
@@ -54,6 +55,10 @@ export function saveProgress() {
       chapterPath: path,
       positionSec: player.currentTime,
       chapterDuration: player.duration || undefined,
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error("save progress error", err);
+    }).finally(() => {
+      console.log("save progress done");
+    });
   });
 }
