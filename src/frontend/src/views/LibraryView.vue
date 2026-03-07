@@ -17,8 +17,7 @@
         :class="{ active: isActive(book) }"
       >
         <router-link :to="`/book/${book.id}`" class="row-cover-link" tabindex="-1" @click="resume(book)">
-          <img v-if="book.coverPath" :src="`/uploads/${book.coverPath}`" :alt="book.title" class="row-cover" />
-          <div v-else class="row-cover placeholder"></div>
+          <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="row-cover" />
         </router-link>
 
         <div class="row-body">
@@ -33,7 +32,7 @@
                 @click="confirmRemoveId = book.id"
                 :disabled="removeMutation.isPending.value && removeMutation.variables.value === book.id"
                 title="Убрать из библиотеки"
-              >✕</button>
+              ><X :size="11" /></button>
             </div>
           </div>
 
@@ -67,6 +66,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { X } from 'lucide-vue-next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
 import { api, type LibraryBook } from '../api';
 import { player, playBook } from '../stores/player';

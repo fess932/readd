@@ -4,7 +4,7 @@
     <router-link to="/explore" :class="{ active: route.path === '/explore' }">Все книги</router-link>
     <span class="spacer"></span>
     <span class="user-name">{{ auth.user.name }}</span>
-    <button @click="logout" class="logout">Выйти</button>
+    <button @click="logout" class="logout" title="Выйти"><LogOut :size="15" /></button>
   </nav>
 
   <div class="content" :class="{ 'with-player': !!player.book }">
@@ -17,6 +17,7 @@
 
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router';
+import { LogOut } from 'lucide-vue-next';
 import { auth, clearAuth } from './stores/auth';
 import { player } from './stores/player';
 import Player from './components/Player.vue';
@@ -50,7 +51,7 @@ nav a { color: #666; font-weight: 500; padding: 0.25rem 0.6rem; border-radius: 6
 nav a.active, nav a:hover { color: #fff; }
 .spacer { flex: 1; }
 .user-name { color: #444; font-size: 0.85rem; }
-.logout { background: none; border: 1px solid #2a2a2a; color: #555; padding: 0.25rem 0.6rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+.logout { display: flex; align-items: center; background: none; border: 1px solid #2a2a2a; color: #555; padding: 0.3rem; border-radius: 6px; cursor: pointer; }
 .logout:hover { color: #fff; border-color: #444; }
 
 .content { min-height: calc(100vh - 48px); }

@@ -10,8 +10,7 @@
 
   <div v-if="player.book" class="player">
     <div class="player-left">
-      <img v-if="player.book.coverPath" :src="`/uploads/${player.book.coverPath}`" alt="" class="player-thumb" />
-      <div v-else class="player-thumb placeholder"></div>
+      <img :src="player.book.coverPath ? `/uploads/${player.book.coverPath}` : '/placeholder.jpg'" alt="" class="player-thumb" />
       <div class="player-meta">
         <p class="player-title">{{ player.book.title }}</p>
         <p class="player-sub">{{ player.book.author }}</p>
@@ -20,9 +19,11 @@
 
     <div class="player-center">
       <div class="player-controls">
-        <button class="ctrl-btn" @click="prevChapter" :disabled="player.chapterIdx === 0" title="Предыдущая">⏮</button>
-        <button class="ctrl-btn play-btn" @click="togglePlay">{{ player.playing ? '⏸' : '▶' }}</button>
-        <button class="ctrl-btn" @click="nextChapter" :disabled="player.chapterIdx >= chapterCount - 1" title="Следующая">⏭</button>
+        <button class="ctrl-btn" @click="prevChapter" :disabled="player.chapterIdx === 0" title="Предыдущая"><SkipBack :size="16" /></button>
+        <button class="ctrl-btn" @click="skip(-15)" title="-15 сек"><RotateCcw :size="15" /></button>
+        <button class="ctrl-btn play-btn" @click="togglePlay"><Pause v-if="player.playing" :size="20" /><Play v-else :size="20" /></button>
+        <button class="ctrl-btn" @click="skip(15)" title="+15 сек"><RotateCw :size="15" /></button>
+        <button class="ctrl-btn" @click="nextChapter" :disabled="player.chapterIdx >= chapterCount - 1" title="Следующая"><SkipForward :size="16" /></button>
       </div>
 
       <div
@@ -53,6 +54,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
+import { SkipBack, SkipForward, Play, Pause, RotateCcw, RotateCw } from 'lucide-vue-next';
 import { player, currentChapterPath, saveProgress } from '../stores/player';
 
 const audioEl = ref<HTMLAudioElement | null>(null);
@@ -193,6 +195,12 @@ function nextChapter() {
   player.playing = true;
 }
 
+function skip(sec: number) {
+  if (!audioEl.value || !player.duration) return;
+  audioEl.value.currentTime = Math.max(0, Math.min(player.duration, audioEl.value.currentTime + sec));
+  player.currentTime = audioEl.value.currentTime;
+}
+
 function togglePlay() {
   if (!player.book) return;
   player.playing = !player.playing;
@@ -306,4 +314,5 @@ const chapterCount = computed(() => player.book?.chapters.length ?? 0);
   font-variant-numeric: tabular-nums;
 }
 .remaining { color: #444; }
+
 </style>

@@ -4,19 +4,20 @@
     <p v-else-if="error" class="err">{{ (error as any).message }}</p>
     <template v-else-if="book">
       <div class="book-header">
-        <img v-if="book.coverPath" :src="`/uploads/${book.coverPath}`" :alt="book.title" class="cover" />
-        <div v-else class="cover placeholder"></div>
+        <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="cover" />
         <div class="book-info">
           <h1>{{ book.title }}</h1>
           <p class="author">{{ book.author }}</p>
           <p v-if="book.narrator" class="narrator">Читает: {{ book.narrator }}</p>
           <p class="meta">{{ book.chapters.length }} глав</p>
           <div class="book-actions">
-            <button v-if="player.book?.id === bookId && player.playing" class="btn-resume playing" @click="player.playing = false">⏸ Пауза</button>
-            <button v-else class="btn-resume" @click="playChapter(progressChapterIdx >= 0 ? progressChapterIdx : 0)">
-              ▶ {{ book.progress ? 'Продолжить' : 'Слушать' }}
+            <button v-if="player.book?.id === bookId && player.playing" class="btn-resume playing" @click="player.playing = false">
+              <Pause :size="14" /> Пауза
             </button>
-            <router-link to="/library" class="back">← Библиотека</router-link>
+            <button v-else class="btn-resume" @click="playChapter(progressChapterIdx >= 0 ? progressChapterIdx : 0)">
+              <Play :size="14" /> {{ book.progress ? 'Продолжить' : 'Слушать' }}
+            </button>
+            <router-link to="/library" class="back"><ArrowLeft :size="14" /> Библиотека</router-link>
           </div>
         </div>
       </div>
@@ -58,6 +59,7 @@
 
 <script setup lang="ts">
 import { computed, watch } from 'vue';
+import { Play, Pause, ArrowLeft } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuery } from '@tanstack/vue-query';
 import { api, type Chapter } from '../api';
@@ -174,6 +176,7 @@ h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem; }
 .meta { color: #444; font-size: 0.8rem; margin: 0.5rem 0; }
 .book-actions { display: flex; align-items: center; gap: 1rem; margin-top: 0.75rem; }
 .btn-resume {
+  display: flex; align-items: center; gap: 0.35rem;
   background: #fff; color: #000;
   border: none; border-radius: 20px;
   padding: 0.4rem 1.1rem; font-size: 0.85rem; font-weight: 600;
@@ -181,7 +184,7 @@ h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem; }
 }
 .btn-resume:hover { opacity: 0.85; }
 .btn-resume.playing { background: #2a2a2a; color: #fff; }
-.back { color: #555; font-size: 0.85rem; text-decoration: none; }
+.back { display: flex; align-items: center; gap: 0.3rem; color: #555; font-size: 0.85rem; text-decoration: none; }
 .back:hover { color: #fff; }
 
 .hint { color: #555; text-align: center; padding: 3rem 0; }

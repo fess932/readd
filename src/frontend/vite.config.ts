@@ -21,6 +21,7 @@ function makeProxy(extra: object = {}) {
 
 export default defineConfig({
   plugins: [vue()],
+  publicDir: 'static',
   build: {
     outDir: '../../dist',
     emptyOutDir: true,

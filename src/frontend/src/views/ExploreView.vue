@@ -2,7 +2,7 @@
   <main class="page">
     <div class="page-header">
       <h2>Общая библиотека</h2>
-      <button class="btn-primary" @click="openModal">+ Загрузить книгу</button>
+      <button class="btn-primary" @click="openModal"><Upload :size="15" /> Загрузить книгу</button>
     </div>
 
     <p v-if="isLoading" class="hint">Загрузка...</p>
@@ -10,8 +10,7 @@
     <p v-else-if="!books?.length" class="hint">Книг пока нет. Загрузите первую!</p>
     <div v-else class="books-grid">
       <div v-for="book in books" :key="book.id" class="book-card">
-        <img v-if="book.coverPath" :src="`/uploads/${book.coverPath}`" :alt="book.title" class="book-cover" />
-        <div v-else class="book-cover placeholder"></div>
+        <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="book-cover" />
         <div class="book-info">
           <h3>{{ book.title }}</h3>
           <p class="author">{{ book.author }}</p>
@@ -23,10 +22,10 @@
         </div>
         <div class="book-actions">
           <button class="btn-add" @click="addMutation.mutate(book.id)" :disabled="addMutation.isPending.value && addMutation.variables.value === book.id">
-            {{ addMutation.isPending.value && addMutation.variables.value === book.id ? '...' : '+ В моё' }}
+            <Plus :size="14" /> В моё
           </button>
           <button v-if="auth.user?.isAdmin" class="btn-delete" @click="confirmDeleteId = book.id" :disabled="deleteMutation.isPending.value && deleteMutation.variables.value === book.id">
-            {{ deleteMutation.isPending.value && deleteMutation.variables.value === book.id ? '...' : 'Удалить' }}
+            <Trash2 :size="14" />
           </button>
         </div>
       </div>
@@ -39,6 +38,7 @@
       <h3>Загрузить книгу</h3>
       <form @submit.prevent="submitUpload">
         <label class="folder-drop">
+          <FolderOpen :size="28" />
           <span>Выберите папку с книгой</span>
           <input type="file" webkitdirectory @change="handleFolderSelect" />
         </label>
@@ -65,14 +65,14 @@
             ></div>
           </div>
           <p class="progress-text">
-            <template v-if="uploadDone">✓ Загружено</template>
+            <template v-if="uploadDone"><CheckCircle2 :size="13" style="vertical-align: -2px" /> Загружено</template>
             <template v-else-if="uploadProgress === 100">Сохранение на сервере…</template>
             <template v-else>Отправка {{ uploadProgress }}%…</template>
           </p>
         </template>
 
         <div v-if="uploadError" class="upload-error">
-          <span>✕</span> {{ uploadError }}
+          <X :size="14" /> {{ uploadError }}
         </div>
 
         <div class="modal-actions">
@@ -102,6 +102,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { Upload, Plus, Trash2, FolderOpen, CheckCircle2 } from 'lucide-vue-next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
 import { api, type Book } from '../api';
 import { auth } from '../stores/auth';
@@ -259,6 +260,7 @@ function pluralChapters(n: number) {
 h2 { font-size: 1.4rem; font-weight: 700; }
 
 .btn-primary {
+  display: flex; align-items: center; gap: 0.4rem;
   background: #fff; color: #000; border: none;
   padding: 0.5rem 1rem; border-radius: 8px;
   font-weight: 600; cursor: pointer; font-size: 0.9rem;
@@ -280,9 +282,9 @@ h2 { font-size: 1.4rem; font-weight: 700; }
 .stats { display: flex; flex-wrap: wrap; gap: 0.3rem 0.5rem; margin-top: 0.35rem; }
 .stats span { font-size: 0.75rem; color: #555; background: #222; padding: 1px 6px; border-radius: 4px; }
 .book-actions { padding: 0.5rem 0.75rem 0.75rem; display: flex; gap: 0.5rem; }
-.btn-add { flex: 1; background: #2a2a2a; color: #fff; border: none; padding: 0.4rem 0.5rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+.btn-add { flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.3rem; background: #2a2a2a; color: #fff; border: none; padding: 0.4rem 0.5rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
 .btn-add:hover:not(:disabled) { background: #333; }
-.btn-delete { background: #3a1a1a; color: #f87171; border: none; padding: 0.4rem 0.5rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+.btn-delete { display: flex; align-items: center; justify-content: center; background: #3a1a1a; color: #f87171; border: none; padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer; }
 .btn-delete:hover:not(:disabled) { background: #4a1a1a; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
