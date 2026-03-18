@@ -1,3 +1,5 @@
+import { reactive } from 'vue';
+
 export interface User {
   id: number;
   name: string;
@@ -7,7 +9,6 @@ export interface User {
 const TOKEN_KEY = 'readd_token';
 
 function loadFromStorage(): { user: User | null; token: string | null } {
-  if (typeof localStorage === 'undefined') return { user: null, token: null };
   const token = localStorage.getItem(TOKEN_KEY);
   if (!token) return { user: null, token: null };
   try {
@@ -20,9 +21,9 @@ function loadFromStorage(): { user: User | null; token: string | null } {
 
 const initial = loadFromStorage();
 
-export const auth = $state({
-  user: initial.user,
-  token: initial.token,
+export const auth = reactive({
+  user: initial.user as User | null,
+  token: initial.token as string | null,
 });
 
 export function setAuth(token: string, user: User) {

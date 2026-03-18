@@ -1,10 +1,7 @@
-import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
 import http from 'http';
 
-// Отдельный Agent без keep-alive для каждого проксируемого пути.
-// Это решает EPIPE (старые keep-alive соединения не переиспользуются)
-// без добавления заголовка Connection: close, который обрывает загрузку больших файлов.
 const noKeepAliveAgent = new http.Agent({ keepAlive: false });
 
 function makeProxy(extra: object = {}) {
@@ -23,7 +20,12 @@ function makeProxy(extra: object = {}) {
 }
 
 export default defineConfig({
-  plugins: [sveltekit()],
+  plugins: [vue()],
+  publicDir: 'static',
+  build: {
+    outDir: '../../dist',
+    emptyOutDir: true,
+  },
   server: {
     proxy: {
       '/api': makeProxy({ proxyTimeout: 300_000, timeout: 300_000 }),

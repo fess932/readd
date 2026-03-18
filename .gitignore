@@ -28,3 +28,6 @@ uploads
 *.db-wal
 dist
 .claude
+
+# Rust
+server/target
