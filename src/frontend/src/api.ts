@@ -5,6 +5,21 @@ export interface ChapterProgress {
   positionSec: number;
 }
 
+export interface Stats {
+  personal: {
+    booksInLibrary: number;
+    listenedSec: number;
+    favoriteAuthor: string | null;
+  };
+  global: {
+    totalBooks: number;
+    totalUsers: number;
+    totalSec: number;
+    topBooks: Array<{ id: number; title: string; author: string; coverPath: string | null; libraryCount: number }>;
+    uploaders: Array<{ name: string; booksCount: number }>;
+  };
+}
+
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3000' : '';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -59,12 +74,17 @@ export const api = {
         xhr.send(data);
       }),
     delete: (id: number) => request<{ ok: boolean }>(`/api/books/${id}`, { method: 'DELETE' }),
+    patch: (id: number, body: { author?: string; title?: string; narrator?: string }) =>
+      request<{ ok: boolean }>(`/api/books/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   },
   library: {
     list: () => request<LibraryBook[]>('/api/library'),
     get: (bookId: number) => request<LibraryBook>(`/api/library/${bookId}`),
     add: (bookId: number) => request<{ ok: boolean }>(`/api/library/${bookId}`, { method: 'POST' }),
     remove: (bookId: number) => request<{ ok: boolean }>(`/api/library/${bookId}`, { method: 'DELETE' }),
+  },
+  stats: {
+    get: () => request<Stats>('/api/stats'),
   },
   progress: {
     last: () => request<LastProgress | null>('/api/progress/last'),

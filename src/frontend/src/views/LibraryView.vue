@@ -2,6 +2,9 @@
   <main class="page">
     <div class="page-header">
       <h2>Моя библиотека</h2>
+      <button v-if="books?.length" class="btn-toggle" :class="{ active: groupByAuthor }" @click="groupByAuthor = !groupByAuthor" title="По авторам">
+        <Users :size="15" />
+      </button>
     </div>
 
     <p v-if="isLoading" class="hint">Загрузка...</p>
@@ -9,6 +12,44 @@
     <p v-else-if="!books?.length" class="hint">
       Библиотека пуста. Добавьте книги из <router-link to="/explore">общей библиотеки</router-link>.
     </p>
+    <template v-else-if="groupByAuthor">
+      <div v-for="group in grouped" :key="group.author" class="author-group">
+        <h3 class="author-heading">{{ group.author }} <span class="author-count">{{ group.books.length }}</span></h3>
+        <div class="books-list">
+          <div
+            v-for="book in group.books"
+            :key="book.id"
+            class="book-row"
+            :class="{ active: isActive(book) }"
+          >
+            <router-link :to="`/book/${book.id}`" class="row-cover-link" tabindex="-1" @click="resume(book)">
+              <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="row-cover" />
+            </router-link>
+            <div class="row-body">
+              <div class="row-top">
+                <router-link :to="`/book/${book.id}`" class="row-info" @click="resume(book)">
+                  <p class="row-title">{{ book.title }}</p>
+                  <p v-if="book.narrator" class="row-author">{{ book.narrator }}</p>
+                </router-link>
+                <div class="row-actions">
+                  <button class="btn-remove" @click="confirmRemoveId = book.id" :disabled="removeMutation.isPending.value && removeMutation.variables.value === book.id" title="Убрать из библиотеки"><X :size="11" /></button>
+                </div>
+              </div>
+              <div class="progress-row">
+                <div class="progress-track"><div class="progress-fill" :style="{ width: liveProgress(book) * 100 + '%' }"></div></div>
+                <div class="progress-meta">
+                  <span v-if="book.chapters.length > 1" class="chapters-info">
+                    <template v-if="book.progress">Гл. {{ book.chapters.findIndex(c => c.filePath === book.progress!.chapterPath) + 1 }} / {{ book.chapters.length }}</template>
+                    <template v-else>{{ book.chapters.length }} глав</template>
+                  </span>
+                  <span v-if="remainingTime(book)" class="remaining">осталось {{ remainingTime(book) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
     <div v-else class="books-list">
       <div
         v-for="book in books"
@@ -65,8 +106,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { X } from 'lucide-vue-next';
+import { ref, watch, computed } from 'vue';
+import { X, Users } from 'lucide-vue-next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
 import { api, type LibraryBook } from '../api';
 import { player, playBook } from '../stores/player';
@@ -75,6 +116,18 @@ import Confirm from '../components/Confirm.vue';
 
 const queryClient = useQueryClient();
 const confirmRemoveId = ref<number | null>(null);
+const groupByAuthor = ref(false);
+
+const grouped = computed(() => {
+  const map = new Map<string, LibraryBook[]>();
+  for (const book of books.value ?? []) {
+    if (!map.has(book.author)) map.set(book.author, []);
+    map.get(book.author)!.push(book);
+  }
+  return [...map.entries()]
+    .map(([author, books]) => ({ author, books }))
+    .sort((a, b) => a.author.localeCompare(b.author, 'ru'));
+});
 
 const { data: books, isLoading, error } = useQuery({
   queryKey: ['library'],
@@ -163,8 +216,14 @@ function remainingTime(book: LibraryBook): string | null {
 
 <style scoped>
 .page { max-width: 800px; margin: 0 auto; padding: 1.5rem; }
-.page-header { margin-bottom: 1.5rem; }
-h2 { font-size: 1.4rem; font-weight: 700; }
+.page-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
+h2 { font-size: 1.4rem; font-weight: 700; flex: 1; }
+.btn-toggle { display: flex; align-items: center; justify-content: center; background: none; border: 1px solid #2a2a2a; color: #555; padding: 0.35rem 0.5rem; border-radius: 8px; cursor: pointer; }
+.btn-toggle:hover { color: #fff; border-color: #444; }
+.btn-toggle.active { background: #2a2a2a; color: #fff; border-color: #444; }
+.author-group { margin-bottom: 1.5rem; }
+.author-heading { font-size: 0.9rem; font-weight: 600; color: #666; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+.author-count { font-size: 0.72rem; font-weight: 400; color: #444; background: #1a1a1a; border: 1px solid #2a2a2a; padding: 1px 6px; border-radius: 10px; }
 
 .hint { color: #555; text-align: center; padding: 3rem 0; }
 .hint a { color: #888; text-decoration: underline; }

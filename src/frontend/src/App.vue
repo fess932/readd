@@ -2,6 +2,7 @@
   <nav v-if="auth.user">
     <router-link to="/library" :class="{ active: route.path === '/library' }">Моя библиотека</router-link>
     <router-link to="/explore" :class="{ active: route.path === '/explore' }">Все книги</router-link>
+    <router-link to="/stats" :class="{ active: route.path === '/stats' }">Статистика</router-link>
     <span class="spacer"></span>
     <span class="user-name">{{ auth.user.name }}</span>
     <button @click="logout" class="logout" title="Выйти"><LogOut :size="15" /></button>

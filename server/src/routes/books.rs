@@ -396,6 +396,43 @@ pub async fn upload(
     })))
 }
 
+pub async fn patch(
+    State(state): State<Arc<AppState>>,
+    claims: Claims,
+    Path(id): Path<i64>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<Value>, AppError> {
+    if !claims.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let author = body["author"].as_str().map(|s| s.trim().to_string());
+    let title = body["title"].as_str().map(|s| s.trim().to_string());
+    let narrator = body["narrator"].as_str().map(|s| s.trim().to_string());
+
+    if author.as_deref().is_some_and(|s| s.is_empty())
+        || title.as_deref().is_some_and(|s| s.is_empty())
+    {
+        return Err(AppError::BadRequest("author and title cannot be empty".into()));
+    }
+
+    let result = sqlx::query(
+        "UPDATE books SET author = COALESCE(?, author), title = COALESCE(?, title), narrator = COALESCE(?, narrator) WHERE id = ?"
+    )
+    .bind(&author)
+    .bind(&title)
+    .bind(&narrator)
+    .bind(id)
+    .execute(&state.pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+
+    Ok(Json(json!({ "ok": true })))
+}
+
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     claims: Claims,

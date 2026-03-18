@@ -4,6 +4,7 @@ import LoginView from '../views/LoginView.vue';
 import LibraryView from '../views/LibraryView.vue';
 import ExploreView from '../views/ExploreView.vue';
 import BookView from '../views/BookView.vue';
+import StatsView from '../views/StatsView.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -12,6 +13,7 @@ const router = createRouter({
     { path: '/login', name: 'login', component: LoginView },
     { path: '/library', name: 'library', component: LibraryView, meta: { requiresAuth: true } },
     { path: '/explore', name: 'explore', component: ExploreView, meta: { requiresAuth: true } },
+    { path: '/stats', name: 'stats', component: StatsView, meta: { requiresAuth: true } },
     { path: '/book/:id', name: 'book', component: BookView, meta: { requiresAuth: true } },
   ],
 });

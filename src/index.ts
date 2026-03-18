@@ -6,6 +6,7 @@ import { authRoutes } from "./routes/auth";
 import { booksRoutes } from "./routes/books";
 import { libraryRoutes } from "./routes/library";
 import { progressRoutes } from "./routes/progress";
+import { statsRoutes } from "./routes/stats";
 
 const PORT = 3000;
 
@@ -141,6 +142,7 @@ const app = new Elysia()
   .use(booksRoutes)
   .use(libraryRoutes)
   .use(progressRoutes)
+  .use(statsRoutes)
   // Продакшен: отдаём собранный фронтенд из dist/
   // В dev этот код не выполняется (папки dist/ нет)
   .get("/*", async ({ params, set }) => {

@@ -2,31 +2,90 @@
   <main class="page">
     <div class="page-header">
       <h2>Общая библиотека</h2>
-      <button class="btn-primary" @click="openModal"><Upload :size="15" /> Загрузить книгу</button>
+      <div class="header-actions">
+        <button class="btn-toggle" :class="{ active: groupByAuthor }" @click="groupByAuthor = !groupByAuthor" title="По авторам">
+          <Users :size="15" />
+        </button>
+        <button class="btn-primary" @click="openModal"><Upload :size="15" /> Загрузить книгу</button>
+      </div>
     </div>
 
     <p v-if="isLoading" class="hint">Загрузка...</p>
     <p v-else-if="error" class="error">{{ (error as any).message }}</p>
     <p v-else-if="!books?.length" class="hint">Книг пока нет. Загрузите первую!</p>
+    <template v-else-if="groupByAuthor">
+      <div v-for="group in grouped" :key="group.author" class="author-group">
+        <h3 class="author-heading">{{ group.author }} <span class="author-count">{{ group.books.length }}</span></h3>
+        <div class="books-grid">
+          <div v-for="book in group.books" :key="book.id" class="book-card">
+            <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="book-cover" />
+            <div class="book-info">
+              <template v-if="editingId === book.id">
+                <input class="edit-input" v-model="editTitle" placeholder="Название" />
+                <input class="edit-input" v-model="editAuthor" placeholder="Автор" />
+                <input class="edit-input" v-model="editNarrator" placeholder="Диктор" />
+              </template>
+              <template v-else>
+                <h3>{{ book.title }}</h3>
+                <p v-if="book.narrator" class="meta">Читает: {{ book.narrator }}</p>
+                <div class="stats">
+                  <span v-if="book.chaptersCount > 0">{{ book.chaptersCount }} {{ pluralChapters(book.chaptersCount) }}</span>
+                  <span v-if="formatDuration(book.totalSec)">{{ formatDuration(book.totalSec) }}</span>
+                </div>
+              </template>
+            </div>
+            <div class="book-actions">
+              <template v-if="editingId === book.id">
+                <button class="btn-save" @click="submitEdit(book.id)" :disabled="editMutation.isPending.value"><Check :size="14" /></button>
+                <button class="btn-cancel-edit" @click="cancelEdit"><XIcon :size="14" /></button>
+              </template>
+              <template v-else>
+                <button class="btn-add" @click="addMutation.mutate(book.id)" :disabled="addMutation.isPending.value && addMutation.variables.value === book.id">
+                  <Plus :size="14" /> В моё
+                </button>
+                <button v-if="auth.user?.isAdmin" class="btn-edit" @click="startEdit(book)"><Pencil :size="14" /></button>
+                <button v-if="auth.user?.isAdmin" class="btn-delete" @click="confirmDeleteId = book.id" :disabled="deleteMutation.isPending.value && deleteMutation.variables.value === book.id">
+                  <Trash2 :size="14" />
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
     <div v-else class="books-grid">
       <div v-for="book in books" :key="book.id" class="book-card">
         <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="book-cover" />
         <div class="book-info">
-          <h3>{{ book.title }}</h3>
-          <p class="author">{{ book.author }}</p>
-          <p v-if="book.narrator" class="meta">Читает: {{ book.narrator }}</p>
-          <div class="stats">
-            <span v-if="book.chaptersCount > 0">{{ book.chaptersCount }} {{ pluralChapters(book.chaptersCount) }}</span>
-            <span v-if="formatDuration(book.totalSec)">{{ formatDuration(book.totalSec) }}</span>
-          </div>
+          <template v-if="editingId === book.id">
+            <input class="edit-input" v-model="editTitle" placeholder="Название" />
+            <input class="edit-input" v-model="editAuthor" placeholder="Автор" />
+            <input class="edit-input" v-model="editNarrator" placeholder="Диктор" />
+          </template>
+          <template v-else>
+            <h3>{{ book.title }}</h3>
+            <p class="author">{{ book.author }}</p>
+            <p v-if="book.narrator" class="meta">Читает: {{ book.narrator }}</p>
+            <div class="stats">
+              <span v-if="book.chaptersCount > 0">{{ book.chaptersCount }} {{ pluralChapters(book.chaptersCount) }}</span>
+              <span v-if="formatDuration(book.totalSec)">{{ formatDuration(book.totalSec) }}</span>
+            </div>
+          </template>
         </div>
         <div class="book-actions">
-          <button class="btn-add" @click="addMutation.mutate(book.id)" :disabled="addMutation.isPending.value && addMutation.variables.value === book.id">
-            <Plus :size="14" /> В моё
-          </button>
-          <button v-if="auth.user?.isAdmin" class="btn-delete" @click="confirmDeleteId = book.id" :disabled="deleteMutation.isPending.value && deleteMutation.variables.value === book.id">
-            <Trash2 :size="14" />
-          </button>
+          <template v-if="editingId === book.id">
+            <button class="btn-save" @click="submitEdit(book.id)" :disabled="editMutation.isPending.value"><Check :size="14" /></button>
+            <button class="btn-cancel-edit" @click="cancelEdit"><XIcon :size="14" /></button>
+          </template>
+          <template v-else>
+            <button class="btn-add" @click="addMutation.mutate(book.id)" :disabled="addMutation.isPending.value && addMutation.variables.value === book.id">
+              <Plus :size="14" /> В моё
+            </button>
+            <button v-if="auth.user?.isAdmin" class="btn-edit" @click="startEdit(book)"><Pencil :size="14" /></button>
+            <button v-if="auth.user?.isAdmin" class="btn-delete" @click="confirmDeleteId = book.id" :disabled="deleteMutation.isPending.value && deleteMutation.variables.value === book.id">
+              <Trash2 :size="14" />
+            </button>
+          </template>
         </div>
       </div>
     </div>
@@ -101,8 +160,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Upload, Plus, Trash2, FolderOpen, CheckCircle2 } from 'lucide-vue-next';
+import { ref, computed } from 'vue';
+import { Upload, Plus, Trash2, FolderOpen, CheckCircle2, Users, Pencil, Check, X as XIcon } from 'lucide-vue-next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
 import { api, type Book } from '../api';
 import { auth } from '../stores/auth';
@@ -111,6 +170,54 @@ import Confirm from '../components/Confirm.vue';
 
 const queryClient = useQueryClient();
 const confirmDeleteId = ref<number | null>(null);
+const groupByAuthor = ref(false);
+
+// — Edit book —
+const editingId = ref<number | null>(null);
+const editAuthor = ref('');
+const editTitle = ref('');
+const editNarrator = ref('');
+
+function startEdit(book: Book) {
+  editingId.value = book.id;
+  editAuthor.value = book.author;
+  editTitle.value = book.title;
+  editNarrator.value = book.narrator ?? '';
+}
+function cancelEdit() {
+  editingId.value = null;
+}
+
+const editMutation = useMutation({
+  mutationFn: ({ id, body }: { id: number; body: Parameters<typeof api.books.patch>[1] }) =>
+    api.books.patch(id, body),
+  onSuccess: (_, { id, body }) => {
+    queryClient.setQueryData(['books'], (old: Book[] | undefined) =>
+      old?.map(b => b.id === id ? { ...b, ...body } : b) ?? []
+    );
+    editingId.value = null;
+    toast('success', 'Сохранено');
+  },
+  onError: (err: any) => toast('error', err.message),
+});
+
+function submitEdit(id: number) {
+  editMutation.mutate({
+    id,
+    body: { author: editAuthor.value, title: editTitle.value, narrator: editNarrator.value || undefined },
+  });
+}
+
+const grouped = computed(() => {
+  const map = new Map<string, Book[]>();
+  for (const book of books.value ?? []) {
+    if (!map.has(book.author)) map.set(book.author, []);
+    map.get(book.author)!.push(book);
+  }
+  return [...map.entries()]
+    .map(([author, books]) => ({ author, books }))
+    .sort((a, b) => a.author.localeCompare(b.author, 'ru'));
+});
 
 const { data: books, isLoading, error } = useQuery({
   queryKey: ['books'],
@@ -129,6 +236,7 @@ const deleteMutation = useMutation({
   mutationFn: (bookId: number) => api.books.delete(bookId),
   onSuccess: (_, bookId) => {
     queryClient.setQueryData(['books'], (old: Book[] | undefined) => old?.filter(b => b.id !== bookId) ?? []);
+    if (editingId.value === bookId) editingId.value = null;
     toast('success', 'Книга удалена');
     confirmDeleteId.value = null;
   },
@@ -258,6 +366,13 @@ function pluralChapters(n: number) {
 .page { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
 h2 { font-size: 1.4rem; font-weight: 700; }
+.header-actions { display: flex; align-items: center; gap: 0.5rem; }
+.btn-toggle { display: flex; align-items: center; justify-content: center; background: none; border: 1px solid #2a2a2a; color: #555; padding: 0.45rem 0.6rem; border-radius: 8px; cursor: pointer; }
+.btn-toggle:hover { color: #fff; border-color: #444; }
+.btn-toggle.active { background: #2a2a2a; color: #fff; border-color: #444; }
+.author-group { margin-bottom: 2rem; }
+.author-heading { font-size: 1rem; font-weight: 600; color: #888; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+.author-count { font-size: 0.75rem; font-weight: 400; color: #444; background: #1a1a1a; border: 1px solid #2a2a2a; padding: 1px 7px; border-radius: 10px; }
 
 .btn-primary {
   display: flex; align-items: center; gap: 0.4rem;
@@ -284,9 +399,18 @@ h2 { font-size: 1.4rem; font-weight: 700; }
 .book-actions { padding: 0.5rem 0.75rem 0.75rem; display: flex; gap: 0.5rem; }
 .btn-add { flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.3rem; background: #2a2a2a; color: #fff; border: none; padding: 0.4rem 0.5rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
 .btn-add:hover:not(:disabled) { background: #333; }
+.btn-edit { display: flex; align-items: center; justify-content: center; background: none; color: #555; border: 1px solid #2a2a2a; padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer; }
+.btn-edit:hover { color: #fff; border-color: #444; }
+.btn-save { display: flex; align-items: center; justify-content: center; background: #1a3a1a; color: #4ade80; border: none; padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer; flex: 1; }
+.btn-save:hover:not(:disabled) { background: #1f4a1f; }
+.btn-cancel-edit { display: flex; align-items: center; justify-content: center; background: none; color: #555; border: 1px solid #2a2a2a; padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer; }
+.btn-cancel-edit:hover { color: #fff; border-color: #444; }
 .btn-delete { display: flex; align-items: center; justify-content: center; background: #3a1a1a; color: #f87171; border: none; padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer; }
 .btn-delete:hover:not(:disabled) { background: #4a1a1a; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+.edit-input { background: #0f0f0f; border: 1px solid #333; border-radius: 5px; padding: 0.3rem 0.5rem; color: #fff; font-size: 0.82rem; width: 100%; margin-bottom: 0.3rem; outline: none; }
+.edit-input:focus { border-color: #555; }
+.edit-input:last-child { margin-bottom: 0; }
 
 .modal {
   background: #1a1a1a;
