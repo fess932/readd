@@ -16,7 +16,12 @@ const files = readdirSync(dir).filter(f => f.endsWith(".sql")).sort();
 for (const file of files) {
   if (db.query("SELECT 1 FROM _migrations WHERE name = ?").get(file)) continue;
   const sql = readFileSync(join(dir, file), "utf8");
-  db.run(sql);
+  try {
+    db.run(sql);
+  } catch (e: any) {
+    // ignore "duplicate column" — migration was applied manually before
+    if (!e.message?.includes("duplicate column")) throw e;
+  }
   db.run("INSERT INTO _migrations (name) VALUES (?)", [file]);
   console.log(`[migrate] applied: ${file}`);
 }
