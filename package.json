@@ -10,6 +10,7 @@
     "start": "cargo run --release --manifest-path server/Cargo.toml",
     "server:dev": "cargo run --manifest-path server/Cargo.toml",
     "server:build": "cargo build --release --manifest-path server/Cargo.toml",
+    "migrate": "bun run migrate.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
