@@ -6,7 +6,7 @@
   ],
   "scripts": {
     "dev": "bun run dev.ts",
-    "build": "bun run --cwd src/frontend build && cargo build --release --manifest-path server/Cargo.toml",
+    "build": "bun run build.ts",
     "start": "cargo run --release --manifest-path server/Cargo.toml",
     "server:dev": "cargo run --manifest-path server/Cargo.toml",
     "server:build": "cargo build --release --manifest-path server/Cargo.toml",

@@ -2,7 +2,7 @@ import { join } from "path";
 
 const root = import.meta.dir;
 
-// Build the Rust server first (incremental — fast if no changes)
+// Build the Rust server (incremental — fast if no changes)
 const build = Bun.spawnSync(["cargo", "build", "--manifest-path", join(root, "server/Cargo.toml")], {
   stdout: "inherit",
   stderr: "inherit",
