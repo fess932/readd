@@ -7,7 +7,10 @@ const migrate = Bun.spawnSync(["cargo", "sqlx", "migrate", "run"], {
   stdout: "inherit",
   stderr: "inherit",
   cwd: join(root, "server"),
-  env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL ?? "sqlite:../readd.db" },
+  env: {
+    ...process.env,
+    DATABASE_URL: process.env.DATABASE_URL ?? "sqlite:./readd.db",
+  },
 });
 if (migrate.exitCode !== 0) {
   process.stderr.write("\n\x1b[31m[build] Migrations failed.\x1b[0m\n\n");
@@ -21,7 +24,9 @@ const prepare = Bun.spawnSync(["cargo", "sqlx", "prepare"], {
   cwd: join(root, "server"),
 });
 if (prepare.exitCode !== 0) {
-  process.stderr.write("\n\x1b[31m[build] cargo sqlx prepare failed.\x1b[0m\n\n");
+  process.stderr.write(
+    "\n\x1b[31m[build] cargo sqlx prepare failed.\x1b[0m\n\n",
+  );
   process.exit(1);
 }
 
@@ -37,10 +42,19 @@ if (frontend.exitCode !== 0) {
 }
 
 // 4. Build Rust release binary
-const server = Bun.spawnSync(["cargo", "build", "--release", "--manifest-path", join(root, "server/Cargo.toml")], {
-  stdout: "inherit",
-  stderr: "inherit",
-});
+const server = Bun.spawnSync(
+  [
+    "cargo",
+    "build",
+    "--release",
+    "--manifest-path",
+    join(root, "server/Cargo.toml"),
+  ],
+  {
+    stdout: "inherit",
+    stderr: "inherit",
+  },
+);
 if (server.exitCode !== 0) {
   process.stderr.write("\n\x1b[31m[build] Rust build failed.\x1b[0m\n\n");
   process.exit(1);
