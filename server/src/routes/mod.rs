@@ -1,5 +1,5 @@
 use axum::{
-    routing::{delete, get, post},
+    routing::{delete, get, post, patch},
     Router,
 };
 use std::sync::Arc;
@@ -23,12 +23,14 @@ pub fn api_router(state: Arc<AppState>) -> Router {
         .route("/api/books/scan-durations", post(books::scan_durations))
         .route("/api/books", get(books::list).post(books::upload))
         .route("/api/books/{id}", delete(books::delete).patch(books::patch))
+        .route("/api/books/{id}/cover", patch(books::upload_cover))
         // library
         .route("/api/library", get(library::list))
         .route(
             "/api/library/{book_id}",
             get(library::get).post(library::add).delete(library::remove),
         )
+        .route("/api/library/{book_id}/finish", post(library::finish))
         // progress
         .route("/api/progress/last", get(progress::last))
         .route(

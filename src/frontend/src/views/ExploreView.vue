@@ -18,7 +18,10 @@
         <h3 class="author-heading">{{ group.author }} <span class="author-count">{{ group.books.length }}</span></h3>
         <div class="books-grid">
           <div v-for="book in group.books" :key="book.id" class="book-card">
-            <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="book-cover" />
+            <div class="cover-wrap" @mouseenter="hoveredCoverId = book.id" @mouseleave="hoveredCoverId = null">
+              <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="book-cover" />
+              <button v-if="auth.user?.isAdmin" class="cover-edit-btn" :class="{ hidden: hoveredCoverId !== book.id }" @click="openCoverUpload(book.id)" title="Заменить обложку"><ImagePlus :size="14" /></button>
+            </div>
             <div class="book-info">
               <template v-if="editingId === book.id">
                 <input class="edit-input" v-model="editTitle" placeholder="Название" />
@@ -55,7 +58,10 @@
     </template>
     <div v-else class="books-grid">
       <div v-for="book in books" :key="book.id" class="book-card">
-        <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="book-cover" />
+        <div class="cover-wrap" @mouseenter="hoveredCoverId = book.id" @mouseleave="hoveredCoverId = null">
+          <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="book-cover" />
+          <button v-if="auth.user?.isAdmin" class="cover-edit-btn" :class="{ hidden: hoveredCoverId !== book.id }" @click="openCoverUpload(book.id)" title="Заменить обложку"><ImagePlus :size="14" /></button>
+        </div>
         <div class="book-info">
           <template v-if="editingId === book.id">
             <input class="edit-input" v-model="editTitle" placeholder="Название" />
@@ -90,6 +96,8 @@
       </div>
     </div>
   </main>
+
+  <input ref="coverInputEl" type="file" accept="image/*" style="display:none" @change="onCoverFileChange" />
 
   <!-- Upload dialog -->
   <dialog ref="dialogEl" class="modal" @close="closeModal" @click="onDialogClick">
@@ -161,7 +169,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { Upload, Plus, Trash2, FolderOpen, CheckCircle2, Users, Pencil, Check, X as XIcon } from 'lucide-vue-next';
+import { Upload, Plus, Trash2, FolderOpen, CheckCircle2, Users, Pencil, Check, X as XIcon, ImagePlus } from 'lucide-vue-next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
 import { api, type Book } from '../api';
 import { auth } from '../stores/auth';
@@ -171,6 +179,34 @@ import Confirm from '../components/Confirm.vue';
 const queryClient = useQueryClient();
 const confirmDeleteId = ref<number | null>(null);
 const groupByAuthor = ref(false);
+const hoveredCoverId = ref<number | null>(null);
+
+// — Cover upload —
+const coverInputEl = ref<HTMLInputElement | null>(null);
+const coverTargetId = ref<number | null>(null);
+
+function openCoverUpload(bookId: number) {
+  coverTargetId.value = bookId;
+  coverInputEl.value?.click();
+}
+
+const coverMutation = useMutation({
+  mutationFn: ({ id, file }: { id: number; file: File }) => api.books.uploadCover(id, file),
+  onSuccess: ({ coverPath }, { id }) => {
+    queryClient.setQueryData(['books'], (old: Book[] | undefined) =>
+      old?.map(b => b.id === id ? { ...b, coverPath } : b) ?? []
+    );
+    toast('success', 'Обложка обновлена');
+  },
+  onError: (err: any) => toast('error', err.message),
+});
+
+function onCoverFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file || coverTargetId.value === null) return;
+  coverMutation.mutate({ id: coverTargetId.value, file });
+  (e.target as HTMLInputElement).value = '';
+}
 
 // — Edit book —
 const editingId = ref<number | null>(null);
@@ -388,8 +424,11 @@ h2 { font-size: 1.4rem; font-weight: 700; }
 
 .books-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
 .book-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
-.book-cover { width: 100%; aspect-ratio: 1; object-fit: cover; }
-.book-cover.placeholder { background: linear-gradient(135deg, #2a2a2a, #1a1a1a); aspect-ratio: 1; }
+.cover-wrap { position: relative; display: block; }
+.book-cover { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.cover-edit-btn { position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,0.75); color: #ddd; border: none; border-radius: 6px; padding: 0.3rem; cursor: pointer; display: flex; align-items: center; z-index: 2; transition: opacity 0.15s, background 0.15s; }
+.cover-edit-btn.hidden { opacity: 0; pointer-events: none; }
+.cover-edit-btn:hover { color: #fff; background: rgba(0,0,0,0.95); }
 .book-info { padding: 0.75rem; flex: 1; }
 .book-info h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.25rem; line-height: 1.3; }
 .author { color: #888; font-size: 0.85rem; }

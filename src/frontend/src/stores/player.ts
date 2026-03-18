@@ -22,6 +22,7 @@ export const player = reactive({
   playing: false,
   duration: 0,
   currentTime: 0,
+  speed: Number(localStorage.getItem('readd_speed')) || 1,
 });
 
 export function playBook(book: PlayerBook, chapterIdx = 0, positionSec = 0) {

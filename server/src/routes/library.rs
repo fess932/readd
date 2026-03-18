@@ -19,6 +19,7 @@ struct LibBookRow {
     file_path: String,
     uploaded_by: Option<String>,
     added_at: String,
+    finished_at: Option<String>,
     created_at: String,
     chapters_count: i64,
     total_sec: Option<f64>,
@@ -26,7 +27,7 @@ struct LibBookRow {
 
 const LIB_SELECT: &str =
     "SELECT b.id, b.title, b.author, b.narrator, b.cover_path, b.file_path,
-            u.name AS uploaded_by, ul.added_at, b.created_at,
+            u.name AS uploaded_by, ul.added_at, ul.finished_at, b.created_at,
             (SELECT COUNT(*) FROM chapters WHERE book_id = b.id) AS chapters_count,
             (SELECT SUM(duration_sec) FROM chapters WHERE book_id = b.id) AS total_sec
      FROM user_library ul
@@ -104,6 +105,7 @@ pub async fn list(
             "uploadedBy": b.uploaded_by,
             "createdAt": b.created_at,
             "addedAt": b.added_at,
+            "finishedAt": b.finished_at,
             "chaptersCount": b.chapters_count,
             "totalSec": b.total_sec,
             "chapters": chapters,
@@ -143,6 +145,7 @@ pub async fn get(
         "uploadedBy": b.uploaded_by,
         "createdAt": b.created_at,
         "addedAt": b.added_at,
+        "finishedAt": b.finished_at,
         "chaptersCount": b.chapters_count,
         "totalSec": b.total_sec,
         "chapters": chapters,
@@ -169,6 +172,42 @@ pub async fn add(
     )
     .execute(&state.pool)
     .await?;
+
+    Ok(Json(json!({ "ok": true })))
+}
+
+pub async fn finish(
+    State(state): State<Arc<AppState>>,
+    claims: Claims,
+    Path(book_id): Path<i64>,
+) -> Result<Json<Value>, AppError> {
+    // Toggle: if already finished → clear, else set now
+    let current = sqlx::query_scalar!(
+        "SELECT finished_at FROM user_library WHERE user_id = ? AND book_id = ?",
+        claims.id, book_id
+    )
+    .fetch_optional(&state.pool)
+    .await?;
+
+    match current {
+        None => return Err(AppError::NotFound),
+        Some(Some(_)) => {
+            sqlx::query!(
+                "UPDATE user_library SET finished_at = NULL WHERE user_id = ? AND book_id = ?",
+                claims.id, book_id
+            )
+            .execute(&state.pool)
+            .await?;
+        }
+        Some(None) => {
+            sqlx::query!(
+                "UPDATE user_library SET finished_at = datetime('now') WHERE user_id = ? AND book_id = ?",
+                claims.id, book_id
+            )
+            .execute(&state.pool)
+            .await?;
+        }
+    }
 
     Ok(Json(json!({ "ok": true })))
 }

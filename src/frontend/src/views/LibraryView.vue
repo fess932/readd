@@ -12,6 +12,9 @@
     <p v-else-if="!books?.length" class="hint">
       Библиотека пуста. Добавьте книги из <router-link to="/explore">общей библиотеки</router-link>.
     </p>
+    <p v-else-if="!activeBooks.length && !finishedBooks.length" class="hint">
+      Библиотека пуста. Добавьте книги из <router-link to="/explore">общей библиотеки</router-link>.
+    </p>
     <template v-else-if="groupByAuthor">
       <div v-for="group in grouped" :key="group.author" class="author-group">
         <h3 class="author-heading">{{ group.author }} <span class="author-count">{{ group.books.length }}</span></h3>
@@ -32,6 +35,7 @@
                   <p v-if="book.narrator" class="row-author">{{ book.narrator }}</p>
                 </router-link>
                 <div class="row-actions">
+                  <button class="btn-finish" @click="finishMutation.mutate(book.id)" title="Отметить прочитанным"><CheckCheck :size="13" /></button>
                   <button class="btn-remove" @click="confirmRemoveId = book.id" :disabled="removeMutation.isPending.value && removeMutation.variables.value === book.id" title="Убрать из библиотеки"><X :size="11" /></button>
                 </div>
               </div>
@@ -52,7 +56,7 @@
     </template>
     <div v-else class="books-list">
       <div
-        v-for="book in books"
+        v-for="book in activeBooks"
         :key="book.id"
         class="book-row"
         :class="{ active: isActive(book) }"
@@ -68,6 +72,7 @@
               <p class="row-author">{{ book.author }}{{ book.narrator ? ` · ${book.narrator}` : '' }}</p>
             </router-link>
             <div class="row-actions">
+              <button class="btn-finish" @click="finishMutation.mutate(book.id)" title="Отметить прочитанным"><CheckCheck :size="13" /></button>
               <button
                 class="btn-remove"
                 @click="confirmRemoveId = book.id"
@@ -94,6 +99,27 @@
         </div>
       </div>
     </div>
+    <div v-if="finishedBooks.length" class="finished-section">
+      <h3 class="section-heading">Прочитано</h3>
+      <div class="books-list">
+        <div v-for="book in finishedBooks" :key="book.id" class="book-row finished">
+          <img :src="book.coverPath ? `/uploads/${book.coverPath}` : '/placeholder.jpg'" :alt="book.title" class="row-cover" />
+          <div class="row-body">
+            <div class="row-top">
+              <div class="row-info">
+                <p class="row-title">{{ book.title }}</p>
+                <p class="row-author">{{ book.author }}{{ book.narrator ? ` · ${book.narrator}` : '' }}</p>
+              </div>
+              <div class="row-actions">
+                <button class="btn-finish active" @click="finishMutation.mutate(book.id)" title="Снять отметку"><CheckCheck :size="13" /></button>
+                <button class="btn-remove" @click="confirmRemoveId = book.id" title="Убрать из библиотеки"><X :size="11" /></button>
+              </div>
+            </div>
+            <div class="progress-track"><div class="progress-fill done"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 
   <Confirm
@@ -107,7 +133,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
-import { X, Users } from 'lucide-vue-next';
+import { X, Users, CheckCheck } from 'lucide-vue-next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
 import { api, type LibraryBook } from '../api';
 import { player, playBook } from '../stores/player';
@@ -118,15 +144,24 @@ const queryClient = useQueryClient();
 const confirmRemoveId = ref<number | null>(null);
 const groupByAuthor = ref(false);
 
+const activeBooks = computed(() => books.value?.filter(b => !b.finishedAt) ?? []);
+const finishedBooks = computed(() => books.value?.filter(b => b.finishedAt) ?? []);
+
 const grouped = computed(() => {
   const map = new Map<string, LibraryBook[]>();
-  for (const book of books.value ?? []) {
+  for (const book of activeBooks.value) {
     if (!map.has(book.author)) map.set(book.author, []);
     map.get(book.author)!.push(book);
   }
   return [...map.entries()]
     .map(([author, books]) => ({ author, books }))
     .sort((a, b) => a.author.localeCompare(b.author, 'ru'));
+});
+
+const finishMutation = useMutation({
+  mutationFn: (bookId: number) => api.library.finish(bookId),
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['library'] }),
+  onError: (err: any) => toast('error', err.message),
 });
 
 const { data: books, isLoading, error } = useQuery({
@@ -268,4 +303,14 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .progress-meta { display: flex; justify-content: space-between; font-size: 0.72rem; }
 .chapters-info { color: #444; }
 .remaining { color: #444; }
+
+.btn-finish { background: none; color: #444; border: 1px solid #2a2a2a; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.btn-finish:hover { color: #4ade80; border-color: #4ade80; }
+.btn-finish.active { color: #4ade80; border-color: #4ade80; }
+
+.finished-section { margin-top: 2rem; }
+.section-heading { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #444; margin-bottom: 0.75rem; }
+.book-row.finished { opacity: 0.5; }
+.book-row.finished:hover { opacity: 0.75; }
+.progress-fill.done { width: 100%; background: #2a2a2a; }
 </style>

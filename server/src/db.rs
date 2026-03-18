@@ -77,5 +77,10 @@ pub async fn setup(pool: &SqlitePool) -> anyhow::Result<()> {
     .execute(pool)
     .await?;
 
+    // Migrations: ignore errors if column already exists
+    let _ = sqlx::query("ALTER TABLE user_library ADD COLUMN finished_at TEXT")
+        .execute(pool)
+        .await;
+
     Ok(())
 }

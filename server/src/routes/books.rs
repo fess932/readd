@@ -433,6 +433,58 @@ pub async fn patch(
     Ok(Json(json!({ "ok": true })))
 }
 
+pub async fn upload_cover(
+    State(state): State<Arc<AppState>>,
+    claims: Claims,
+    Path(id): Path<i64>,
+    mut multipart: Multipart,
+) -> Result<Json<Value>, AppError> {
+    if !claims.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let book = sqlx::query!("SELECT file_path FROM books WHERE id = ?", id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let book_dir = book.file_path
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .to_string();
+
+    while let Some(field) = multipart.next_field().await? {
+        if field.name() != Some("cover") { continue; }
+
+        let filename = field.file_name().unwrap_or("cover.jpg").to_string();
+        let ext = FsPath::new(&filename)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("jpg")
+            .to_lowercase();
+
+        if !IMAGE_EXT.contains(&ext.as_str()) {
+            return Err(AppError::BadRequest("не изображение".into()));
+        }
+
+        let cover_filename = format!("cover.{ext}");
+        let cover_path = format!("{book_dir}/{cover_filename}");
+        let full_path = state.uploads_dir.join(&book_dir).join(&cover_filename);
+
+        let data = field.bytes().await?;
+        tokio::fs::write(&full_path, &data).await?;
+
+        sqlx::query!("UPDATE books SET cover_path = ? WHERE id = ?", cover_path, id)
+            .execute(&state.pool)
+            .await?;
+
+        return Ok(Json(json!({ "ok": true, "coverPath": cover_path })));
+    }
+
+    Err(AppError::BadRequest("поле cover не найдено".into()))
+}
+
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     claims: Claims,

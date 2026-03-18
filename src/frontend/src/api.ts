@@ -76,12 +76,18 @@ export const api = {
     delete: (id: number) => request<{ ok: boolean }>(`/api/books/${id}`, { method: 'DELETE' }),
     patch: (id: number, body: { author?: string; title?: string; narrator?: string }) =>
       request<{ ok: boolean }>(`/api/books/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    uploadCover: (id: number, file: File) => {
+      const fd = new FormData();
+      fd.append('cover', file);
+      return request<{ ok: boolean; coverPath: string }>(`/api/books/${id}/cover`, { method: 'PATCH', body: fd });
+    },
   },
   library: {
     list: () => request<LibraryBook[]>('/api/library'),
     get: (bookId: number) => request<LibraryBook>(`/api/library/${bookId}`),
     add: (bookId: number) => request<{ ok: boolean }>(`/api/library/${bookId}`, { method: 'POST' }),
     remove: (bookId: number) => request<{ ok: boolean }>(`/api/library/${bookId}`, { method: 'DELETE' }),
+    finish: (bookId: number) => request<{ ok: boolean }>(`/api/library/${bookId}/finish`, { method: 'POST' }),
   },
   stats: {
     get: () => request<Stats>('/api/stats'),
@@ -129,6 +135,7 @@ export interface Book {
 
 export interface LibraryBook extends Book {
   addedAt: string;
+  finishedAt: string | null;
   chapters: Chapter[];
   progress: Progress | null;
 }

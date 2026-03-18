@@ -19,11 +19,11 @@
 
     <div class="player-center">
       <div class="player-controls">
-        <button class="ctrl-btn" @click="prevChapter" :disabled="player.chapterIdx === 0" title="Предыдущая"><SkipBack :size="16" /></button>
-        <button class="ctrl-btn" @click="skip(-15)" title="-15 сек"><RotateCcw :size="15" /></button>
-        <button class="ctrl-btn play-btn" @click="togglePlay"><Pause v-if="player.playing" :size="20" /><Play v-else :size="20" /></button>
-        <button class="ctrl-btn" @click="skip(15)" title="+15 сек"><RotateCw :size="15" /></button>
-        <button class="ctrl-btn" @click="nextChapter" :disabled="player.chapterIdx >= chapterCount - 1" title="Следующая"><SkipForward :size="16" /></button>
+        <button class="ctrl-btn" @click="prevChapter" :disabled="player.chapterIdx === 0" title="Предыдущая глава ["><SkipBack :size="16" /></button>
+        <button class="ctrl-btn" @click="skip(-30)" title="-30 сек ←"><RotateCcw :size="15" /></button>
+        <button class="ctrl-btn play-btn" @click="togglePlay" title="Пауза/Воспроизведение Пробел"><Pause v-if="player.playing" :size="20" /><Play v-else :size="20" /></button>
+        <button class="ctrl-btn" @click="skip(30)" title="+30 сек →"><RotateCw :size="15" /></button>
+        <button class="ctrl-btn" @click="nextChapter" :disabled="player.chapterIdx >= chapterCount - 1" title="Следующая глава ]"><SkipForward :size="16" /></button>
       </div>
 
       <div
@@ -49,18 +49,33 @@
         <span class="remaining">−{{ fmt(remaining) }}</span>
       </div>
     </div>
+
+    <div class="player-right">
+      <button class="speed-btn" @click="cycleSpeed" :title="`Скорость: ${player.speed}×`">{{ player.speed }}×</button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { SkipBack, SkipForward, Play, Pause, RotateCcw, RotateCw } from 'lucide-vue-next';
 import { player, currentChapterPath, saveProgress } from '../stores/player';
+import { api } from '../api';
+import { useQueryClient } from '@tanstack/vue-query';
 
 const audioEl = ref<HTMLAudioElement | null>(null);
 const seekBarEl = ref<HTMLElement | null>(null);
 const dragging = ref(false);
 const switching = ref(false);
+const queryClient = useQueryClient();
+
+const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+function cycleSpeed() {
+  const idx = SPEEDS.indexOf(player.speed);
+  player.speed = SPEEDS[(idx + 1) % SPEEDS.length];
+  localStorage.setItem('readd_speed', String(player.speed));
+  if (audioEl.value) audioEl.value.playbackRate = player.speed;
+}
 
 function fmt(s: number): string {
   if (!isFinite(s) || s < 0) return '0:00';
@@ -96,6 +111,7 @@ watch(() => player.playing, (playing) => {
 function onLoadedMetadata() {
   if (!audioEl.value) return;
   player.duration = audioEl.value.duration;
+  audioEl.value.playbackRate = player.speed;
   if (player.positionSec > 0 && player.positionSec < audioEl.value.duration - 1) {
     audioEl.value.currentTime = player.positionSec;
     player.currentTime = player.positionSec;
@@ -129,9 +145,31 @@ function onEnded() {
     player.positionSec = 0;
     player.playing = true;
   } else {
+    // Последняя глава закончилась — отмечаем книгу как прочитанную
+    if (player.book) {
+      api.library.finish(player.book.id).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['library'] });
+      }).catch(() => {});
+    }
     player.playing = false;
   }
 }
+
+// Горячие клавиши
+function onKeyDown(e: KeyboardEvent) {
+  if (!player.book) return;
+  const tag = (e.target as HTMLElement).tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'ArrowLeft')  { e.preventDefault(); skip(-30); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); skip(30); }
+  else if (e.key === '[') prevChapter();
+  else if (e.key === ']') nextChapter();
+}
+
+onMounted(() => window.addEventListener('keydown', onKeyDown));
+onUnmounted(() => window.removeEventListener('keydown', onKeyDown));
 
 function seekFromX(clientX: number) {
   if (!audioEl.value || !player.duration || !seekBarEl.value) return;
@@ -315,4 +353,26 @@ const chapterCount = computed(() => player.book?.chapters.length ?? 0);
 }
 .remaining { color: #444; }
 
+.player-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 48px;
+  justify-content: flex-end;
+}
+
+.speed-btn {
+  background: none;
+  border: 1px solid #2a2a2a;
+  color: #666;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  min-width: 40px;
+  text-align: center;
+}
+.speed-btn:hover { color: #fff; border-color: #444; }
 </style>
