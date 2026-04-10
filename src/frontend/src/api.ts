@@ -92,6 +92,38 @@ export const api = {
   stats: {
     get: () => request<Stats>('/api/stats'),
   },
+  textBooks: {
+    list: () => request<TextBook[]>('/api/text-books'),
+    upload: (data: FormData, onProgress?: (pct: number) => void) =>
+      new Promise<TextBook>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', API_BASE + '/api/text-books');
+        if (auth.token) xhr.setRequestHeader('Authorization', `Bearer ${auth.token}`);
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) onProgress?.(Math.round(e.loaded / e.total * 100));
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            let msg = `${xhr.status} ${xhr.statusText}`;
+            try { const b = JSON.parse(xhr.responseText); if (b?.error) msg = b.error; } catch { /* не JSON */ }
+            reject(new Error(msg));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Ошибка сети'));
+        xhr.onabort = () => reject(new Error('Загрузка прервана'));
+        xhr.send(data);
+      }),
+    patch: (id: number, body: { title?: string; author?: string }) =>
+      request<{ ok: boolean }>(`/api/text-books/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    uploadCover: (id: number, file: File) => {
+      const fd = new FormData();
+      fd.append('cover', file);
+      return request<{ ok: boolean; coverPath: string }>(`/api/text-books/${id}/cover`, { method: 'PATCH', body: fd });
+    },
+    delete: (id: number) => request<{ ok: boolean }>(`/api/text-books/${id}`, { method: 'DELETE' }),
+  },
   progress: {
     last: () => request<LastProgress | null>('/api/progress/last'),
     get: (bookId: number) => request<ChapterProgress[]>(`/api/progress/${bookId}`),
@@ -138,4 +170,15 @@ export interface LibraryBook extends Book {
   finishedAt: string | null;
   chapters: Chapter[];
   progress: Progress | null;
+}
+
+export interface TextBook {
+  id: number;
+  title: string;
+  author: string;
+  coverPath?: string | null;
+  filePath: string;
+  fileSize: number | null;
+  uploadedBy?: string;
+  createdAt: string;
 }

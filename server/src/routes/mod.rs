@@ -11,6 +11,7 @@ pub mod books;
 pub mod library;
 pub mod progress;
 pub mod stats;
+pub mod text_books;
 
 pub fn api_router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -39,6 +40,10 @@ pub fn api_router(state: Arc<AppState>) -> Router {
         )
         // stats
         .route("/api/stats", get(stats::get))
+        // text books
+        .route("/api/text-books", get(text_books::list).post(text_books::upload))
+        .route("/api/text-books/{id}", delete(text_books::delete).patch(text_books::patch))
+        .route("/api/text-books/{id}/cover", patch(text_books::upload_cover))
         .with_state(state)
     // .layer(TraceLayer::new_for_http())
 }
