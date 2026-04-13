@@ -2,6 +2,7 @@ use axum::{
     routing::{delete, get, post, patch},
     Router,
 };
+
 use std::sync::Arc;
 
 use crate::state::AppState;
@@ -12,6 +13,7 @@ pub mod library;
 pub mod progress;
 pub mod stats;
 pub mod text_books;
+pub mod tts;
 
 pub fn api_router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -44,6 +46,12 @@ pub fn api_router(state: Arc<AppState>) -> Router {
         .route("/api/text-books", get(text_books::list).post(text_books::upload))
         .route("/api/text-books/{id}", delete(text_books::delete).patch(text_books::patch))
         .route("/api/text-books/{id}/cover", patch(text_books::upload_cover))
+        .route("/api/text-books/{id}/tts", post(tts::create).get(tts::get_for_book))
+        // tts jobs
+        .route("/api/tts-jobs", get(tts::list))
+        .route("/api/tts-jobs/{id}/pause", post(tts::pause))
+        .route("/api/tts-jobs/{id}/resume", post(tts::resume))
+        .route("/api/tts-jobs/{id}", delete(tts::cancel))
         .with_state(state)
     // .layer(TraceLayer::new_for_http())
 }

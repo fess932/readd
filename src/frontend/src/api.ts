@@ -20,6 +20,19 @@ export interface Stats {
   };
 }
 
+export interface TtsJob {
+  id: number;
+  textBookId: number;
+  status: 'running' | 'paused' | 'done' | 'failed';
+  totalChunks: number;
+  doneChunks: number;
+  failedChunks: number;
+  audioBookId: number | null;
+  errorMsg: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3000' : '';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -91,6 +104,19 @@ export const api = {
   },
   stats: {
     get: () => request<Stats>('/api/stats'),
+  },
+  ttsJobs: {
+    list: () => request<TtsJob[]>('/api/tts-jobs'),
+    create: (textBookId: number) =>
+      request<TtsJob>(`/api/text-books/${textBookId}/tts`, { method: 'POST' }),
+    getForBook: (textBookId: number) =>
+      request<TtsJob | null>(`/api/text-books/${textBookId}/tts`),
+    pause: (jobId: number) =>
+      request<{ ok: boolean }>(`/api/tts-jobs/${jobId}/pause`, { method: 'POST' }),
+    resume: (jobId: number) =>
+      request<{ ok: boolean }>(`/api/tts-jobs/${jobId}/resume`, { method: 'POST' }),
+    cancel: (jobId: number) =>
+      request<{ ok: boolean }>(`/api/tts-jobs/${jobId}`, { method: 'DELETE' }),
   },
   textBooks: {
     list: () => request<TextBook[]>('/api/text-books'),

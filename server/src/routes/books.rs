@@ -133,7 +133,7 @@ struct SavedFile {
     size: u64,
 }
 
-fn get_audio_duration(path: &std::path::Path) -> Option<f64> {
+pub fn get_audio_duration(path: &std::path::Path) -> Option<f64> {
     use symphonia::core::{
         formats::FormatOptions, io::MediaSourceStream, meta::MetadataOptions, probe::Hint,
     };
