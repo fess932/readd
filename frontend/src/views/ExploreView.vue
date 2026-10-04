@@ -36,8 +36,11 @@
     :done="uploadDone"
     :progress="uploadProgress"
     :error="uploadError"
-    :can-submit="!!files.length && !!title && !!author"
+    :can-submit="audioCount > 0 && !!title && !!author"
+    :status="uploadStatus"
+    cancellable
     @submit="submitUpload"
+    @cancel="uploadAbort?.abort()"
     @closed="resetUpload"
   >
     <label class="file-drop">
@@ -81,6 +84,7 @@ import { auth } from '../stores/auth';
 import { player, stopPlayer } from '../stores/player';
 import { flushOutbox } from '../stores/progressSync';
 import { toast } from '../stores/toasts';
+import { uploadBook, type BookUpload } from '../upload';
 import { plural } from '../utils/format';
 import AudioBookCard, { type BookEdit } from '../components/AudioBookCard.vue';
 import AuthorGroups from '../components/AuthorGroups.vue';
@@ -205,8 +209,17 @@ function onFolderPicked(e: Event) {
   setCoverPreview(images.find(f => COVER_NAME.test(f.name)) ?? images[0]);
 }
 
+const uploadStatus = ref('');
+let uploadAbort: AbortController | null = null;
+
 const uploadMutation = useMutation({
-  mutationFn: (fd: FormData) => api.books.upload(fd, (pct) => { uploadProgress.value = pct; }),
+  mutationFn: (upload: BookUpload) => {
+    uploadAbort = new AbortController();
+    return uploadBook(upload, (p) => {
+      uploadProgress.value = p.percent;
+      uploadStatus.value = `${p.filesDone} из ${p.filesTotal} файлов`;
+    }, uploadAbort.signal);
+  },
   onSuccess: (book) => {
     queryClient.setQueryData(['books'], (old: Book[] | undefined) => [book, ...(old ?? [])]);
     uploadDone.value = true;
@@ -223,26 +236,28 @@ const uploadMutation = useMutation({
 
 async function submitUpload() {
   uploadProgress.value = 0;
+  uploadStatus.value = '';
   uploadError.value = '';
   uploadDone.value = false;
 
+  // Only what makes up the book: audio and a cover, not .DS_Store, playlists or notes
+  const bookFiles = files.value.filter(f => AUDIO_EXT.test(f.name) || IMAGE_EXT.test(f.name));
+
   // Ask before sending gigabytes: the server may already have this book
   try {
-    await api.books.check(files.value);
+    await api.books.check(bookFiles);
   } catch (e: any) {
     uploadError.value = e.message;
     toast('error', e.message);
     return;
   }
 
-  const fd = new FormData();
-  fd.append('title', title.value);
-  fd.append('author', author.value);
-  if (narrator.value) fd.append('narrator', narrator.value);
-  // The path inside the folder lets the server order chapters across sub-folders (CD1, CD2…)
-  for (const f of files.value) fd.append('files', f, f.webkitRelativePath || f.name);
-
-  uploadMutation.mutate(fd);
+  uploadMutation.mutate({
+    title: title.value,
+    author: author.value,
+    narrator: narrator.value || undefined,
+    files: bookFiles,
+  });
 }
 
 function resetUpload() {
@@ -252,6 +267,7 @@ function resetUpload() {
   files.value = [];
   setCoverPreview(undefined);
   uploadProgress.value = 0;
+  uploadStatus.value = '';
   uploadError.value = '';
   uploadDone.value = false;
 }

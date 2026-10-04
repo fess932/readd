@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    routing::{any, delete, get, patch, post},
+    routing::{any, delete, get, patch, post, put},
 };
 
 use std::sync::Arc;
@@ -8,6 +8,7 @@ use std::sync::Arc;
 use crate::state::AppState;
 
 pub mod auth;
+pub mod book_upload;
 pub mod books;
 pub mod library;
 pub mod progress;
@@ -24,7 +25,15 @@ pub fn api_router(state: Arc<AppState>) -> Router {
         // books — literal routes before :id
         .route("/api/books/check", post(books::check))
         .route("/api/books/scan-durations", post(books::scan_durations))
-        .route("/api/books", get(books::list).post(books::upload))
+        .route("/api/books", get(books::list))
+        // a book is uploaded file by file: open, send each file, finish
+        .route("/api/books/uploads", post(book_upload::start))
+        .route("/api/books/uploads/{id}", delete(book_upload::cancel))
+        .route(
+            "/api/books/uploads/{id}/files/{index}",
+            put(book_upload::put_file),
+        )
+        .route("/api/books/uploads/{id}/finish", post(book_upload::finish))
         .route("/api/books/{id}", delete(books::delete).patch(books::patch))
         .route("/api/books/{id}/cover", patch(books::upload_cover))
         // library

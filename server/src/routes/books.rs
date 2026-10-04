@@ -4,17 +4,14 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::{collections::HashSet, path::Path as FsPath, sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use crate::{
     auth::Claims,
     error::AppError,
     media::audio_duration,
     state::AppState,
-    storage::{
-        create_upload_dir, is_audio, is_cover_name, is_image, natural_cmp, remove_old_cover,
-        sanitize_filename, save_cover, save_field,
-    },
+    storage::{is_audio, remove_old_cover, sanitize_filename, save_cover},
 };
 
 #[derive(sqlx::FromRow, Serialize)]
@@ -32,28 +29,8 @@ struct BookRow {
     total_sec: Option<f64>,
 }
 
-/// A file received in an upload and already written to the book directory.
-struct SavedFile {
-    rel_path: String,
-    /// Name on disk (sanitized, unique within the book directory).
-    name: String,
-    /// Sanitized name before the uniqueness suffix — what `/books/check` sees.
-    fp_name: String,
-    /// Lowercased path as sent by the browser; chapters are ordered by it.
-    sort_key: String,
-    size: u64,
-}
-
-#[derive(Default)]
-struct UploadForm {
-    title: Option<String>,
-    author: Option<String>,
-    narrator: Option<String>,
-    files: Vec<SavedFile>,
-}
-
 /// Identifies a book by the names and sizes of its audio files, to reject re-uploads.
-fn fingerprint(files: &[(&str, u64)]) -> String {
+pub(super) fn fingerprint(files: &[(&str, u64)]) -> String {
     let mut entries: Vec<String> = files
         .iter()
         .filter(|(name, _)| is_audio(name))
@@ -62,87 +39,6 @@ fn fingerprint(files: &[(&str, u64)]) -> String {
     entries.sort();
     let joined = entries.join("|");
     format!("{:x}", wyhash::wyhash(joined.as_bytes(), 0))
-}
-
-/// `name`, or `stem-2.ext`, `stem-3.ext`… if it is already taken.
-/// Happens when folders hold files with the same name (CD1/01.mp3, CD2/01.mp3).
-fn unique_name(name: &str, used: &HashSet<String>) -> String {
-    if !used.contains(name) {
-        return name.to_string();
-    }
-    let path = FsPath::new(name);
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
-    let ext = path.extension().and_then(|e| e.to_str());
-    (2..)
-        .map(|n| match ext {
-            Some(ext) => format!("{stem}-{n}.{ext}"),
-            None => format!("{stem}-{n}"),
-        })
-        .find(|candidate| !used.contains(candidate))
-        .expect("an unbounded range always yields a free name")
-}
-
-/// Reads the multipart body: text fields into the form, files onto disk.
-async fn receive_upload(
-    mut multipart: Multipart,
-    uploads_dir: &FsPath,
-    dir_name: &str,
-) -> Result<UploadForm, AppError> {
-    let mut form = UploadForm::default();
-    let mut used_names: HashSet<String> = HashSet::new();
-
-    while let Some(field) = multipart.next_field().await? {
-        match field.name().unwrap_or("") {
-            "title" => form.title = Some(field.text().await?.trim().to_string()),
-            "author" => form.author = Some(field.text().await?.trim().to_string()),
-            "narrator" => form.narrator = Some(field.text().await?.trim().to_string()),
-            _ => {
-                let raw_name = field.file_name().unwrap_or("file").to_string();
-                let fp_name = sanitize_filename(&raw_name);
-                let name = unique_name(&fp_name, &used_names);
-                used_names.insert(name.clone());
-
-                let rel_path = format!("{dir_name}/{name}");
-                let size = save_field(field, &uploads_dir.join(&rel_path)).await?;
-
-                form.files.push(SavedFile {
-                    rel_path,
-                    name,
-                    fp_name,
-                    sort_key: raw_name.to_lowercase(),
-                    size,
-                });
-            }
-        }
-    }
-    Ok(form)
-}
-
-/// Probes all files in parallel, giving up on each after 4 seconds.
-async fn probe_durations(uploads_dir: &FsPath, files: &[&SavedFile]) -> Vec<Option<f64>> {
-    let tasks: Vec<_> = files
-        .iter()
-        .map(|f| {
-            let path = uploads_dir.join(&f.rel_path);
-            tokio::spawn(tokio::time::timeout(
-                Duration::from_secs(4),
-                tokio::task::spawn_blocking(move || audio_duration(&path)),
-            ))
-        })
-        .collect();
-
-    let mut durations = Vec::with_capacity(tasks.len());
-    for task in tasks {
-        // JoinError, timeout and the blocking task's JoinError all mean "unknown"
-        let duration = task
-            .await
-            .ok()
-            .and_then(|r| r.ok())
-            .and_then(|r| r.ok())
-            .flatten();
-        durations.push(duration);
-    }
-    durations
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -195,105 +91,6 @@ pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, App
     .fetch_all(&state.pool)
     .await?;
     Ok(Json(json!(rows)))
-}
-
-pub async fn upload(
-    State(state): State<Arc<AppState>>,
-    claims: Claims,
-    multipart: Multipart,
-) -> Result<Json<Value>, AppError> {
-    let (dir_name, guard) = create_upload_dir(&state.uploads_dir, "book").await?;
-    let form = receive_upload(multipart, &state.uploads_dir, &dir_name).await?;
-
-    let (Some(title), Some(author)) = (
-        form.title.filter(|s| !s.is_empty()),
-        form.author.filter(|s| !s.is_empty()),
-    ) else {
-        return Err(AppError::BadRequest("title и author обязательны".into()));
-    };
-    let narrator = form.narrator.filter(|s| !s.is_empty());
-    let files = form.files;
-
-    let mut audio: Vec<&SavedFile> = files.iter().filter(|f| is_audio(&f.name)).collect();
-    if audio.is_empty() {
-        return Err(AppError::BadRequest("Аудиофайлы не найдены".into()));
-    }
-    audio.sort_by(|a, b| natural_cmp(&a.sort_key, &b.sort_key));
-
-    let cover = files
-        .iter()
-        .find(|f| is_image(&f.name) && is_cover_name(&f.name))
-        .or_else(|| files.iter().find(|f| is_image(&f.name)));
-
-    let pairs: Vec<(&str, u64)> = files.iter().map(|f| (f.fp_name.as_str(), f.size)).collect();
-    let fp = fingerprint(&pairs);
-    let duplicate = sqlx::query!("SELECT title FROM books WHERE fingerprint = ?", fp)
-        .fetch_optional(&state.pool)
-        .await?;
-    if let Some(d) = duplicate {
-        return Err(AppError::Conflict(format!(
-            "Книга уже загружена: «{}»",
-            d.title
-        )));
-    }
-
-    let durations = probe_durations(&state.uploads_dir, &audio).await;
-    let unknown = durations.iter().filter(|d| d.is_none()).count();
-    if unknown > 0 {
-        tracing::info!(
-            "{} файлов без длительности — заполнятся при воспроизведении",
-            unknown
-        );
-    }
-
-    // Insert book and its chapters atomically
-    let file_path = audio[0].rel_path.clone();
-    let cover_path = cover.map(|c| c.rel_path.clone());
-
-    let mut tx = state.pool.begin().await?;
-    let book = sqlx::query!(
-        "INSERT INTO books (title, author, narrator, file_path, cover_path, fingerprint, uploaded_by_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id AS \"id!\", created_at",
-        title, author, narrator, file_path, cover_path, fp, claims.id
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-
-    for (i, (file, duration)) in audio.iter().zip(&durations).enumerate() {
-        let sort_order = i as i64;
-        sqlx::query!(
-            "INSERT INTO chapters (book_id, file_path, sort_order, duration_sec) VALUES (?, ?, ?, ?)",
-            book.id, file.rel_path, sort_order, duration
-        )
-        .execute(&mut *tx)
-        .await?;
-    }
-    tx.commit().await?;
-    guard.keep();
-
-    let known: Vec<f64> = durations.iter().flatten().copied().collect();
-    let total_sec = (!known.is_empty()).then(|| known.iter().sum::<f64>());
-
-    tracing::info!(
-        "book created: id={} title={} chapters={} duration={:?}min",
-        book.id,
-        title,
-        audio.len(),
-        total_sec.map(|s| (s / 60.0) as i64)
-    );
-
-    Ok(Json(json!({
-        "id": book.id,
-        "title": title,
-        "author": author,
-        "narrator": narrator,
-        "coverPath": cover_path,
-        "filePath": file_path,
-        "uploadedBy": claims.name,
-        "createdAt": book.created_at,
-        "chaptersCount": audio.len(),
-        "totalSec": total_sec,
-    })))
 }
 
 pub async fn patch(
@@ -489,18 +286,6 @@ mod tests {
         let b = fingerprint(&[("2.mp3", 2), ("1.mp3", 1)]);
         assert_eq!(a, b);
         assert_ne!(a, fingerprint(&[("1.mp3", 1), ("2.mp3", 3)]));
-    }
-
-    #[test]
-    fn unique_name_never_reuses_a_taken_name() {
-        let mut used = HashSet::new();
-        let mut names = Vec::new();
-        for raw in ["a.mp3", "a-2.mp3", "a.mp3", "a.mp3"] {
-            let name = unique_name(raw, &used);
-            used.insert(name.clone());
-            names.push(name);
-        }
-        assert_eq!(names, ["a.mp3", "a-2.mp3", "a-3.mp3", "a-4.mp3"]);
     }
 
     #[tokio::test]

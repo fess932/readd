@@ -33,7 +33,7 @@ export interface TtsJob {
   updatedAt: string;
 }
 
-const API_BASE = import.meta.env.DEV ? 'http://localhost:3000' : '';
+export const API_BASE = import.meta.env.DEV ? 'http://localhost:3000' : '';
 
 /** The server answered with an error status. A network failure is a plain `TypeError` instead. */
 export class ApiError extends Error {
@@ -49,7 +49,7 @@ export function setUnauthorizedHandler(handler: () => void) {
   onUnauthorized = handler;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
   if (auth.token) headers['Authorization'] = `Bearer ${auth.token}`;
   if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
@@ -72,34 +72,11 @@ export const api = {
   },
   books: {
     list: () => request<Book[]>('/api/books'),
+    // uploading a book lives in upload.ts
     check: (files: File[]) =>
       request<{ ok: boolean }>('/api/books/check', {
         method: 'POST',
         body: JSON.stringify({ files: files.map(f => ({ name: f.name, size: f.size })) }),
-      }),
-    upload: (data: FormData, onProgress?: (pct: number) => void) =>
-      new Promise<Book>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', API_BASE + '/api/books');
-        if (auth.token) xhr.setRequestHeader('Authorization', `Bearer ${auth.token}`);
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) onProgress?.(Math.round(e.loaded / e.total * 100));
-        };
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(JSON.parse(xhr.responseText));
-          } else {
-            let msg = `${xhr.status} ${xhr.statusText}`;
-            try {
-              const body = JSON.parse(xhr.responseText);
-              if (body?.error) msg = body.error;
-            } catch { /* не JSON */ }
-            reject(new Error(msg));
-          }
-        };
-        xhr.onerror = () => reject(new Error('Ошибка сети'));
-        xhr.onabort = () => reject(new Error('Загрузка прервана'));
-        xhr.send(data);
       }),
     delete: (id: number) => request<{ ok: boolean }>(`/api/books/${id}`, { method: 'DELETE' }),
     patch: (id: number, body: { author?: string; title?: string; narrator?: string }) =>

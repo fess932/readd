@@ -145,6 +145,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env();
 
     tokio::fs::create_dir_all(&config.uploads_dir).await?;
+    routes::book_upload::remove_abandoned(&config.uploads_dir).await;
     let pool = connect_db(&config.database_path).await?;
 
     let state = Arc::new(AppState {

@@ -18,14 +18,14 @@
           <p class="progress-text">
             <template v-if="done"><CheckCircle2 :size="13" style="vertical-align: -2px" /> Загружено</template>
             <template v-else-if="progress === 100">Сохранение на сервере…</template>
-            <template v-else>Отправка {{ progress }}%…</template>
+            <template v-else>Отправка {{ progress }}%{{ status ? ` · ${status}` : '' }}…</template>
           </p>
         </template>
 
         <div v-if="error" class="upload-error"><X :size="14" /> {{ error }}</div>
 
         <div class="modal-actions">
-          <button type="button" @click="close" :disabled="pending">Отмена</button>
+          <button type="button" @click="pending ? emit('cancel') : close()" :disabled="pending && !cancellable">Отмена</button>
           <button type="submit" class="btn-primary" :disabled="pending || done || !canSubmit">
             {{ pending ? `${progress}%` : done ? 'Готово' : 'Загрузить' }}
           </button>
@@ -47,10 +47,16 @@ const props = defineProps<{
   progress: number;
   error: string;
   canSubmit: boolean;
+  /** Extra detail next to the percentage, e.g. "12 из 55 файлов". */
+  status?: string;
+  /** "Отмена" stays active during the upload and emits `cancel`. */
+  cancellable?: boolean;
 }>();
 
 const emit = defineEmits<{
   submit: [];
+  /** "Отмена" pressed while uploading (only when `cancellable`). */
+  cancel: [];
   /** The dialog is gone; the parent resets its form state. */
   closed: [];
 }>();
@@ -79,7 +85,12 @@ function onClosed() {
 }
 
 function onBackdropClick(e: MouseEvent) {
-  if (e.target === dialogEl.value) close();
+  // By position, not by target: a click on the dialog's own padding, or a text selection
+  // dragged out of a field, also has the dialog as its target and must not close the form
+  const rect = dialogEl.value?.getBoundingClientRect();
+  if (!rect) return;
+  const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+  if (!inside) close();
 }
 
 defineExpose({ show, close });
@@ -98,5 +109,5 @@ defineExpose({ show, close });
 .progress-text { font-size: 0.8rem; color: #888; margin-bottom: 0.75rem; }
 .progress-wrap.done + .progress-text { color: #4ade80; }
 
-.upload-error { display: flex; align-items: center; gap: 0.4rem; background: #3a1a1a; color: #f87171; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.85rem; margin-bottom: 0.75rem; }
+.upload-error { display: flex; align-items: flex-start; overflow-wrap: anywhere; gap: 0.4rem; background: #3a1a1a; color: #f87171; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.85rem; margin-bottom: 0.75rem; }
 </style>
