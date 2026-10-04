@@ -84,7 +84,7 @@ async fn with_details(
     let progress = sqlx::query_as::<_, ProgressRow>(
         "SELECT book_id, chapter_path, position_sec FROM progress
          WHERE user_id = ? AND book_id = ?
-         ORDER BY updated_at DESC LIMIT 1",
+         ORDER BY listened_at DESC LIMIT 1",
     )
     .bind(user_id)
     .bind(book.id)

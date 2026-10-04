@@ -35,6 +35,13 @@ export interface TtsJob {
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3000' : '';
 
+/** The server answered with an error status. A network failure is a plain `TypeError` instead. */
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
 let onUnauthorized: (() => void) | null = null;
 
 /** Called when the server rejects our token, so the app can go back to the login page. */
@@ -51,7 +58,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (res.status === 401 && auth.token) onUnauthorized?.();
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? res.statusText);
+    throw new ApiError(err.error ?? res.statusText, res.status);
   }
   return res.json();
 }
@@ -162,8 +169,12 @@ export const api = {
   progress: {
     last: () => request<LastProgress | null>('/api/progress/last'),
     get: (bookId: number) => request<ChapterProgress[]>(`/api/progress/${bookId}`),
-    save: (bookId: number, body: { chapterPath: string; positionSec: number; chapterDuration?: number }) =>
-      request<{ ok: boolean }>(`/api/progress/${bookId}`, { method: 'POST', body: JSON.stringify(body) }),
+    save: (bookId: number, body: { chapterPath: string; positionSec: number; chapterDuration?: number; listenedAt?: number }) =>
+      request<{ ok: boolean; applied: boolean; latest: LatestPosition }>(`/api/progress/${bookId}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        keepalive: true, // let the request finish when it is sent while the tab is closing
+      }),
   },
 };
 
@@ -172,6 +183,14 @@ export interface Chapter {
   filePath: string;
   sortOrder: number;
   durationSec: number | null;
+}
+
+/** Where the user last was in a book, across all devices. */
+export interface LatestPosition {
+  chapterPath: string;
+  positionSec: number;
+  /** When that was, unix ms. */
+  listenedAt: number;
 }
 
 export interface Progress {

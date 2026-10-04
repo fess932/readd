@@ -66,6 +66,7 @@ import { api, type Chapter } from '../api';
 import {
   player, playBook, resumeBook, saveProgress, setChapterPos, knownChapterPos, isChapterFinished,
 } from '../stores/player';
+import { flushOutbox } from '../stores/progressSync';
 import { coverUrl, formatClock, pluralChapters } from '../utils/format';
 
 const route = useRoute();
@@ -75,13 +76,13 @@ const bookId = computed(() => Number(route.params.id));
 
 const { data: book, isLoading, error } = useQuery({
   queryKey: computed(() => ['library', bookId.value]),
-  queryFn: () => api.library.get(bookId.value),
+  queryFn: () => flushOutbox().then(() => api.library.get(bookId.value)),
   retry: false, // "not in your library" will not change on a retry
 });
 
 const { data: positions } = useQuery({
   queryKey: computed(() => ['progress', bookId.value]),
-  queryFn: () => api.progress.get(bookId.value),
+  queryFn: () => flushOutbox().then(() => api.progress.get(bookId.value)),
 });
 
 // Seed the session's positions from the server, without overwriting what the

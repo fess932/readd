@@ -4,7 +4,10 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::{auth::Claims, error::AppError, state::AppState};
 
@@ -19,7 +22,7 @@ pub async fn last(
          JOIN books b ON p.book_id = b.id
          JOIN user_library ul ON ul.user_id = p.user_id AND ul.book_id = p.book_id
          WHERE p.user_id = ?
-         ORDER BY p.updated_at DESC
+         ORDER BY p.listened_at DESC
          LIMIT 1",
         claims.id
     )
@@ -68,8 +71,22 @@ pub struct SaveBody {
     pub chapter_path: String,
     pub position_sec: f64,
     pub chapter_duration: Option<f64>,
+    /// When the listener was at this position, unix ms. A device that was offline
+    /// sends it late; without it the save counts as happening now.
+    pub listened_at: Option<i64>,
 }
 
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+/// Saves a position unless the server already knows a later listening of this chapter.
+///
+/// Responds with `applied` and with `latest` — where the user last was in this book
+/// across all devices — so that a device with stale data can catch up.
 pub async fn save(
     State(state): State<Arc<AppState>>,
     claims: Claims,
@@ -80,6 +97,9 @@ pub async fn save(
         return Err(AppError::BadRequest("positionSec must be a number".into()));
     }
     let position_sec = body.position_sec.max(0.0);
+    // A clock running ahead must not make a save unbeatable
+    let now = now_ms();
+    let listened_at = body.listened_at.unwrap_or(now).clamp(0, now);
 
     let chapter = sqlx::query!(
         "SELECT id AS \"id!\" FROM chapters WHERE book_id = ? AND file_path = ?",
@@ -90,19 +110,24 @@ pub async fn save(
     .await?
     .ok_or(AppError::NotFound)?;
 
-    sqlx::query!(
-        "INSERT INTO progress (user_id, book_id, chapter_path, position_sec, updated_at)
-         VALUES (?, ?, ?, ?, datetime('now'))
+    let applied = sqlx::query!(
+        "INSERT INTO progress (user_id, book_id, chapter_path, position_sec, updated_at, listened_at)
+         VALUES (?, ?, ?, ?, datetime('now'), ?)
          ON CONFLICT(user_id, book_id, chapter_path) DO UPDATE SET
            position_sec = excluded.position_sec,
-           updated_at   = datetime('now')",
+           updated_at   = excluded.updated_at,
+           listened_at  = excluded.listened_at
+         WHERE excluded.listened_at >= progress.listened_at",
         claims.id,
         book_id,
         body.chapter_path,
-        position_sec
+        position_sec,
+        listened_at
     )
     .execute(&state.pool)
-    .await?;
+    .await?
+    .rows_affected()
+        > 0;
 
     // The player reports the duration; keep it only where the server could not probe one
     if let Some(dur) = body.chapter_duration.filter(|d| d.is_finite() && *d > 0.0) {
@@ -115,7 +140,25 @@ pub async fn save(
         .await?;
     }
 
-    Ok(Json(json!({ "ok": true })))
+    let latest = sqlx::query!(
+        "SELECT chapter_path, position_sec, listened_at FROM progress
+         WHERE user_id = ? AND book_id = ?
+         ORDER BY listened_at DESC LIMIT 1",
+        claims.id,
+        book_id
+    )
+    .fetch_one(&state.pool)
+    .await?;
+
+    Ok(Json(json!({
+        "ok": true,
+        "applied": applied,
+        "latest": {
+            "chapterPath": latest.chapter_path,
+            "positionSec": latest.position_sec,
+            "listenedAt": latest.listened_at,
+        },
+    })))
 }
 
 #[cfg(test)]
@@ -132,6 +175,17 @@ mod tests {
             chapter_path: chapter_path.into(),
             position_sec,
             chapter_duration,
+            listened_at: None,
+        })
+    }
+
+    /// A save that reports when the position was reached, in ms before now.
+    fn body_ago(chapter_path: &str, position_sec: f64, ms_ago: i64) -> Json<SaveBody> {
+        Json(SaveBody {
+            chapter_path: chapter_path.into(),
+            position_sec,
+            chapter_duration: None,
+            listened_at: Some(now_ms() - ms_ago),
         })
     }
 
@@ -275,5 +329,97 @@ mod tests {
         let Json(found) = last(State(t.state.clone()), user).await.unwrap();
         assert_eq!(found["bookId"], id);
         assert_eq!(found["positionSec"], 7.0);
+    }
+
+    const HOUR: i64 = 3_600_000;
+
+    #[tokio::test]
+    async fn a_late_report_of_older_listening_does_not_overwrite() {
+        // Laptop listened an hour ago; the phone, offline since two hours ago, reports only now
+        let t = testing::state().await;
+        let user = testing::user(&t.state, "u", false).await;
+        let id = testing::book(&t.state, &user, "Книга", &["1.mp3"]).await;
+        let ch = format!("book-{id}/1.mp3");
+        let save_ago = |pos, ago| {
+            save(
+                State(t.state.clone()),
+                user.clone(),
+                Path(id),
+                body_ago(&ch, pos, ago),
+            )
+        };
+
+        let Json(laptop) = save_ago(1200.0, HOUR).await.unwrap();
+        assert_eq!(laptop["applied"], true);
+
+        let Json(phone) = save_ago(3000.0, 2 * HOUR).await.unwrap();
+        assert_eq!(phone["applied"], false);
+        assert_eq!(phone["latest"]["positionSec"], 1200.0);
+
+        // …while newer listening does, even to an earlier position
+        let Json(newer) = save_ago(600.0, 0).await.unwrap();
+        assert_eq!(newer["applied"], true);
+        assert_eq!(newer["latest"]["positionSec"], 600.0);
+    }
+
+    #[tokio::test]
+    async fn latest_is_the_chapter_listened_to_last_not_the_one_saved_last() {
+        let t = testing::state().await;
+        let user = testing::user(&t.state, "u", false).await;
+        let id = testing::book(&t.state, &user, "Книга", &["1.mp3", "2.mp3"]).await;
+        testing::add_to_library(&t.state, &user, id).await;
+        let (ch1, ch2) = (format!("book-{id}/1.mp3"), format!("book-{id}/2.mp3"));
+
+        save(
+            State(t.state.clone()),
+            user.clone(),
+            Path(id),
+            body_ago(&ch2, 50.0, HOUR),
+        )
+        .await
+        .unwrap();
+        // chapter 1 was listened to earlier, but its report arrives later
+        let Json(late) = save(
+            State(t.state.clone()),
+            user.clone(),
+            Path(id),
+            body_ago(&ch1, 900.0, 2 * HOUR),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(late["applied"], true, "a different chapter has its own row");
+        assert_eq!(late["latest"]["chapterPath"], ch2);
+        let Json(found) = last(State(t.state.clone()), user).await.unwrap();
+        assert_eq!(found["chapterPath"], ch2);
+    }
+
+    #[tokio::test]
+    async fn a_clock_running_ahead_cannot_block_later_saves() {
+        let t = testing::state().await;
+        let user = testing::user(&t.state, "u", false).await;
+        let id = testing::book(&t.state, &user, "Книга", &["1.mp3"]).await;
+        let ch = format!("book-{id}/1.mp3");
+
+        // a device whose clock is a day ahead
+        save(
+            State(t.state.clone()),
+            user.clone(),
+            Path(id),
+            body_ago(&ch, 10.0, -24 * HOUR),
+        )
+        .await
+        .unwrap();
+        let Json(normal) = save(
+            State(t.state.clone()),
+            user,
+            Path(id),
+            body(&ch, 20.0, None),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(normal["applied"], true);
+        assert_eq!(normal["latest"]["positionSec"], 20.0);
     }
 }

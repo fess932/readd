@@ -120,6 +120,17 @@ watch(() => player.playing, (playing) => {
   }
 });
 
+// The store asks to jump within the loaded chapter (another device listened further)
+watch(() => player.seekRequest, (sec) => {
+  if (sec === null) return;
+  player.seekRequest = null;
+  if (switching.value || !player.duration) {
+    player.positionSec = sec; // applied once the audio has loaded
+  } else {
+    seekTo(sec);
+  }
+});
+
 function onLoadedMetadata() {
   const el = audioEl.value;
   if (!el) return;
@@ -229,8 +240,19 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeyDown));
-onUnmounted(() => window.removeEventListener('keydown', onKeyDown));
+// Closing the tab mid-chapter: `pause` never fires, so save here
+function onPageHide() {
+  if (player.playing) saveProgress(true);
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('pagehide', onPageHide);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeyDown);
+  window.removeEventListener('pagehide', onPageHide);
+});
 
 // ── Seek bar ────────────────────────────────────────────────────────────────
 

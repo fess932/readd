@@ -57,6 +57,7 @@ import { Users } from 'lucide-vue-next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
 import { api, type LibraryBook } from '../api';
 import { player, playBook, resumeBook, stopPlayer } from '../stores/player';
+import { flushOutbox } from '../stores/progressSync';
 import { toast } from '../stores/toasts';
 import AuthorGroups from '../components/AuthorGroups.vue';
 import Confirm from '../components/Confirm.vue';
@@ -66,14 +67,15 @@ const queryClient = useQueryClient();
 const grouped = ref(false);
 const confirmRemoveId = ref<number | null>(null);
 
+// Positions this device could not deliver earlier go first, so the answers include them
 const { data: books, isLoading, error } = useQuery({
   queryKey: ['library'],
-  queryFn: api.library.list,
+  queryFn: () => flushOutbox().then(api.library.list),
 });
 
 const { data: lastProgress } = useQuery({
   queryKey: ['progress', 'last'],
-  queryFn: api.progress.last,
+  queryFn: () => flushOutbox().then(api.progress.last),
 });
 
 const activeBooks = computed(() => books.value?.filter(b => !b.finishedAt) ?? []);

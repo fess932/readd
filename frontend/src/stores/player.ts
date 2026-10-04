@@ -1,5 +1,6 @@
 import { reactive } from 'vue';
-import { api, type Chapter, type Progress } from '../api';
+import type { Chapter, Progress } from '../api';
+import { queueSave, setServerAheadHandler } from './progressSync';
 
 export interface PlayerBook {
   id: number;
@@ -14,6 +15,8 @@ export const player = reactive({
   chapterIdx: 0,
   /** Where to seek once the chapter's audio has loaded. */
   positionSec: 0,
+  /** Ask the Player component to jump here in the chapter that is already loaded. */
+  seekRequest: null as number | null,
   playing: false,
   duration: 0,
   currentTime: 0,
@@ -78,6 +81,7 @@ export function stopPlayer() {
   player.book = null;
   player.chapterIdx = 0;
   player.positionSec = 0;
+  player.seekRequest = null;
   player.playing = false;
   player.duration = 0;
   player.currentTime = 0;
@@ -132,7 +136,25 @@ export function saveProgress(force = false, overrideTime?: number) {
   setChapterPos(path, time);
   lastChapterOfBook[bookId] = path;
 
-  api.progress
-    .save(bookId, { chapterPath: path, positionSec: time, chapterDuration: player.duration || undefined })
-    .catch(console.error);
+  queueSave({ bookId, chapterPath: path, positionSec: time, chapterDuration: player.duration || undefined });
 }
+
+// Another device has listened to this book since. Unless this one is playing right now
+// (then *it* is the newest listening), continue from where that device stopped.
+setServerAheadHandler((bookId, latest) => {
+  const loaded = player.book?.id === bookId;
+  if (loaded && player.playing) return;
+
+  setChapterPos(latest.chapterPath, latest.positionSec);
+  lastChapterOfBook[bookId] = latest.chapterPath;
+  if (!loaded) return;
+
+  const chapterIdx = player.book!.chapters.findIndex(c => c.filePath === latest.chapterPath);
+  if (chapterIdx < 0) return;
+  if (chapterIdx === player.chapterIdx) {
+    player.seekRequest = latest.positionSec;
+  } else {
+    openChapter(chapterIdx, latest.positionSec);
+    player.playing = false;
+  }
+});
