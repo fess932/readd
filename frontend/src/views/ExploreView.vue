@@ -18,6 +18,7 @@
         :book="item"
         :is-admin="isAdmin"
         :show-author="!underAuthor"
+        :in-library="libraryIds.has(item.id)"
         :adding="addMutation.isPending.value && addMutation.variables.value === item.id"
         :deleting="deleteMutation.isPending.value && deleteMutation.variables.value === item.id"
         :save="(edit) => editMutation.mutateAsync({ id: item.id, edit })"
@@ -78,6 +79,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
 import { api, type Book } from '../api';
 import { auth } from '../stores/auth';
 import { player, stopPlayer } from '../stores/player';
+import { flushOutbox } from '../stores/progressSync';
 import { toast } from '../stores/toasts';
 import { plural } from '../utils/format';
 import AudioBookCard, { type BookEdit } from '../components/AudioBookCard.vue';
@@ -94,6 +96,13 @@ const { data: books, isLoading, error } = useQuery({
   queryKey: ['books'],
   queryFn: api.books.list,
 });
+
+// Which of these books the user already has
+const { data: library } = useQuery({
+  queryKey: ['library'],
+  queryFn: () => flushOutbox().then(api.library.list),
+});
+const libraryIds = computed(() => new Set(library.value?.map(b => b.id)));
 
 const bookToDelete = computed(() => books.value?.find(b => b.id === confirmDeleteId.value));
 

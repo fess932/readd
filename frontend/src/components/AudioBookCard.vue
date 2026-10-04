@@ -26,7 +26,10 @@
         <button class="btn-icon" @click="editing = false" title="Отмена"><X :size="14" /></button>
       </template>
       <template v-else>
-        <button class="btn-add" @click="emit('add')" :disabled="adding"><Plus :size="14" /> В моё</button>
+        <router-link v-if="inLibrary" :to="`/book/${book.id}`" class="btn-add in-library" title="Открыть книгу">
+          <Check :size="14" /> В моей
+        </router-link>
+        <button v-else class="btn-add" @click="emit('add')" :disabled="adding"><Plus :size="14" /> В моё</button>
         <template v-if="isAdmin">
           <button class="btn-icon" @click="startEdit" title="Редактировать"><Pencil :size="14" /></button>
           <button class="btn-icon danger" @click="emit('delete')" :disabled="deleting" title="Удалить"><Trash2 :size="14" /></button>
@@ -53,6 +56,8 @@ const props = defineProps<{
   book: Book;
   isAdmin: boolean;
   showAuthor: boolean;
+  /** Already in the current user's library. */
+  inLibrary: boolean;
   adding: boolean;
   deleting: boolean;
   /** Persists the edit; the form closes once it resolves. */
@@ -94,4 +99,6 @@ async function submit() {
 <style scoped>
 .btn-add { flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.3rem; background: #2a2a2a; color: #fff; border: none; padding: 0.4rem 0.5rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
 .btn-add:hover:not(:disabled) { background: #333; }
+.btn-add.in-library { background: none; border: 1px solid #2a2a2a; color: #4ade80; }
+.btn-add.in-library:hover { border-color: #4ade80; }
 </style>
