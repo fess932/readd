@@ -7,7 +7,8 @@ COPY package.json bun.lock ./
 COPY frontend/package.json frontend/
 RUN bun install --frozen-lockfile
 COPY frontend frontend
-RUN bun run --cwd frontend build
+# Types are checked in CI; vue-tsc needs Node, which this image does not have
+RUN cd frontend && bunx --bun vite build
 # → /app/dist
 
 # ── Server ────────────────────────────────────────────────────────────────────
