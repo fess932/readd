@@ -1,6 +1,6 @@
 use axum::{
     extract::FromRequestParts,
-    http::{request::Parts, HeaderMap},
+    http::{HeaderMap, request::Parts},
 };
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
@@ -63,5 +63,27 @@ impl FromRequestParts<Arc<AppState>> for Claims {
     ) -> Result<Self, Self::Rejection> {
         let token = extract_bearer(&parts.headers).ok_or(AppError::Unauthorized)?;
         decode_token(token, &state.jwt_secret).ok_or(AppError::Unauthorized)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn token_round_trip_keeps_non_ascii_names() {
+        let token = encode_token(7, "Антон", true, "secret").unwrap();
+        let claims = decode_token(&token, "secret").unwrap();
+        assert_eq!(
+            (claims.id, claims.name.as_str(), claims.is_admin),
+            (7, "Антон", true)
+        );
+    }
+
+    #[test]
+    fn token_signed_with_another_secret_is_rejected() {
+        let token = encode_token(7, "u", false, "secret").unwrap();
+        assert!(decode_token(&token, "other").is_none());
+        assert!(decode_token("garbage", "secret").is_none());
     }
 }

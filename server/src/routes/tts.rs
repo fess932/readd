@@ -1,9 +1,9 @@
 use axum::{
-    extract::{Path, State},
     Json,
+    extract::{Path, State},
 };
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 use crate::{auth::Claims, epub, error::AppError, state::AppState};
@@ -23,18 +23,26 @@ struct TtsJobRow {
     updated_at: String,
 }
 
-/// GET /api/tts-jobs — list all jobs (admin) or current user's jobs
+/// The job SELECT with `$tail` appended; a macro so that the SQL stays a string literal.
+macro_rules! job_select {
+    ($tail:literal) => {
+        concat!(
+            "SELECT id, text_book_id, status, total_chunks, done_chunks, failed_chunks,
+                    audio_book_id, error_msg, created_at, updated_at
+             FROM tts_jobs ",
+            $tail
+        )
+    };
+}
+
+/// GET /api/tts-jobs — list all jobs
 pub async fn list(
     State(state): State<Arc<AppState>>,
     _claims: Claims,
 ) -> Result<Json<Value>, AppError> {
-    let rows = sqlx::query_as::<_, TtsJobRow>(
-        "SELECT id, text_book_id, status, total_chunks, done_chunks, failed_chunks,
-                audio_book_id, error_msg, created_at, updated_at
-         FROM tts_jobs ORDER BY id DESC",
-    )
-    .fetch_all(&state.pool)
-    .await?;
+    let rows = sqlx::query_as::<_, TtsJobRow>(job_select!("ORDER BY id DESC"))
+        .fetch_all(&state.pool)
+        .await?;
     Ok(Json(json!(rows)))
 }
 
@@ -44,16 +52,19 @@ pub async fn create(
     claims: Claims,
     Path(text_book_id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
-    // Check there isn't already an active job for this book
+    // One job per book: a failed one is retried via resume, a finished one
+    // goes away together with its audiobook
     let existing = sqlx::query_scalar!(
-        "SELECT id FROM tts_jobs WHERE text_book_id = ? AND status IN ('running', 'paused') LIMIT 1",
+        "SELECT id FROM tts_jobs WHERE text_book_id = ? LIMIT 1",
         text_book_id
     )
     .fetch_optional(&state.pool)
     .await?;
 
     if existing.is_some() {
-        return Err(AppError::Conflict("Задача для этой книги уже существует".into()));
+        return Err(AppError::Conflict(
+            "Задача для этой книги уже существует".into(),
+        ));
     }
 
     // Load epub path
@@ -80,24 +91,25 @@ pub async fn create(
     let total = chunks.len() as i64;
     let uploader = claims.id;
 
-    // Insert job
+    // Insert the job together with its chunks: the worker must never see a job without them
+    let mut tx = state.pool.begin().await?;
     let job_id = sqlx::query!(
-        "INSERT INTO tts_jobs (text_book_id, status, total_chunks) VALUES (?, 'running', ?) RETURNING id",
+        "INSERT INTO tts_jobs (text_book_id, status, total_chunks) VALUES (?, 'running', ?) RETURNING id AS \"id!\"",
         text_book_id, total
     )
-    .fetch_one(&state.pool)
+    .fetch_one(&mut *tx)
     .await?
-    .id
-    .ok_or_else(|| AppError::Internal(anyhow::anyhow!("RETURNING id was null")))?;
+    .id;
 
-    // Insert chunks in a single transaction
-    let mut tx = state.pool.begin().await?;
     for (i, chunk) in chunks.iter().enumerate() {
         let seq = i as i64;
         let chapter_idx = chunk.epub_chapter_idx as i64;
         sqlx::query!(
             "INSERT INTO tts_chunks (job_id, seq, text, epub_chapter_idx) VALUES (?, ?, ?, ?)",
-            job_id, seq, chunk.text, chapter_idx
+            job_id,
+            seq,
+            chunk.text,
+            chapter_idx
         )
         .execute(&mut *tx)
         .await?;
@@ -109,15 +121,17 @@ pub async fn create(
 
     tracing::info!(
         "TTS job {} created: book={} chunks={} by user={}",
-        job_id, text_book_id, total, uploader
+        job_id,
+        text_book_id,
+        total,
+        uploader
     );
 
-    Ok(Json(json!({
-        "id": job_id,
-        "status": "running",
-        "totalChunks": total,
-        "doneChunks": 0,
-    })))
+    let row = sqlx::query_as::<_, TtsJobRow>(job_select!("WHERE id = ?"))
+        .bind(job_id)
+        .fetch_one(&state.pool)
+        .await?;
+    Ok(Json(json!(row)))
 }
 
 /// GET /api/text-books/:id/tts — get the latest job for a book
@@ -126,11 +140,9 @@ pub async fn get_for_book(
     _claims: Claims,
     Path(text_book_id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
-    let row = sqlx::query_as::<_, TtsJobRow>(
-        "SELECT id, text_book_id, status, total_chunks, done_chunks, failed_chunks,
-                audio_book_id, error_msg, created_at, updated_at
-         FROM tts_jobs WHERE text_book_id = ? ORDER BY id DESC LIMIT 1",
-    )
+    let row = sqlx::query_as::<_, TtsJobRow>(job_select!(
+        "WHERE text_book_id = ? ORDER BY id DESC LIMIT 1"
+    ))
     .bind(text_book_id)
     .fetch_optional(&state.pool)
     .await?;
@@ -159,24 +171,36 @@ pub async fn pause(
     Ok(Json(json!({ "ok": true })))
 }
 
-/// POST /api/tts-jobs/:id/resume
+/// POST /api/tts-jobs/:id/resume — continue a paused job or retry a failed one
 pub async fn resume(
     State(state): State<Arc<AppState>>,
     _claims: Claims,
     Path(job_id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
+    let mut tx = state.pool.begin().await?;
     let rows = sqlx::query!(
-        "UPDATE tts_jobs SET status = 'running', updated_at = datetime('now')
-         WHERE id = ? AND status = 'paused'",
+        "UPDATE tts_jobs SET status = 'running', failed_chunks = 0, error_msg = NULL,
+                             updated_at = datetime('now')
+         WHERE id = ? AND status IN ('paused', 'failed')",
         job_id
     )
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?
     .rows_affected();
 
     if rows == 0 {
         return Err(AppError::NotFound);
     }
+
+    // Give chunks that ran out of attempts another go
+    sqlx::query!(
+        "UPDATE tts_chunks SET status = 'pending', attempts = 0
+         WHERE job_id = ? AND status IN ('failed', 'processing')",
+        job_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
 
     state.tts_notify.notify_one();
     Ok(Json(json!({ "ok": true })))
@@ -198,24 +222,19 @@ pub async fn cancel(
         .ok_or(AppError::NotFound)?;
 
     if job.status == "done" {
-        return Err(AppError::BadRequest("Нельзя отменить завершённую задачу".into()));
+        return Err(AppError::BadRequest(
+            "Задача завершена — удалите аудиокнигу, чтобы озвучить заново".into(),
+        ));
     }
 
-    // Reset any in-flight chunks before deleting
-    sqlx::query!(
-        "UPDATE tts_chunks SET status = 'pending' WHERE job_id = ? AND status = 'processing'",
-        job_id
-    )
-    .execute(&state.pool)
-    .await?;
-
+    let mut tx = state.pool.begin().await?;
     sqlx::query!("DELETE FROM tts_chunks WHERE job_id = ?", job_id)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
-
     sqlx::query!("DELETE FROM tts_jobs WHERE id = ?", job_id)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
 
     // Remove audio files
     let dir = state.uploads_dir.join(format!("tts-{}", job_id));
@@ -223,4 +242,104 @@ pub async fn cancel(
 
     tracing::info!("TTS job {} cancelled", job_id);
     Ok(Json(json!({ "ok": true })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing;
+
+    async fn chunk_statuses(state: &AppState, job_id: i64) -> Vec<String> {
+        sqlx::query_scalar("SELECT status FROM tts_chunks WHERE job_id = ? ORDER BY seq")
+            .bind(job_id)
+            .fetch_all(&state.pool)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn resume_requeues_failed_chunks_of_a_failed_job() {
+        let t = testing::state().await;
+        let admin = testing::user(&t.state, "admin", true).await;
+        let book = testing::text_book(&t.state, &admin, "Книга").await;
+        let job = testing::tts_job(
+            &t.state,
+            book,
+            "failed",
+            None,
+            &["done", "failed", "pending"],
+        )
+        .await;
+
+        resume(State(t.state.clone()), admin, Path(job))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            chunk_statuses(&t.state, job).await,
+            ["done", "pending", "pending"]
+        );
+        let Json(jobs) = list(
+            State(t.state.clone()),
+            testing::user(&t.state, "u", false).await,
+        )
+        .await
+        .unwrap();
+        assert_eq!(jobs[0]["status"], "running");
+        assert_eq!(jobs[0]["textBookId"], book);
+        assert_eq!(jobs[0]["errorMsg"], Value::Null);
+    }
+
+    #[tokio::test]
+    async fn pause_and_resume_only_apply_in_the_right_state() {
+        let t = testing::state().await;
+        let admin = testing::user(&t.state, "admin", true).await;
+        let book = testing::text_book(&t.state, &admin, "Книга").await;
+        let job = testing::tts_job(&t.state, book, "running", None, &["pending"]).await;
+
+        assert!(matches!(
+            resume(State(t.state.clone()), admin.clone(), Path(job)).await,
+            Err(AppError::NotFound)
+        ));
+        pause(State(t.state.clone()), admin.clone(), Path(job))
+            .await
+            .unwrap();
+        assert!(matches!(
+            pause(State(t.state.clone()), admin.clone(), Path(job)).await,
+            Err(AppError::NotFound)
+        ));
+        resume(State(t.state.clone()), admin, Path(job))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn cancel_removes_the_job_but_refuses_a_finished_one() {
+        let t = testing::state().await;
+        let admin = testing::user(&t.state, "admin", true).await;
+        let book = testing::text_book(&t.state, &admin, "Книга").await;
+        let audio = testing::book(&t.state, &admin, "Озвученная", &["book.m4b"]).await;
+        let done = testing::tts_job(&t.state, book, "done", Some(audio), &["done"]).await;
+        let paused = testing::tts_job(&t.state, book, "paused", None, &["done", "pending"]).await;
+
+        let refused = cancel(State(t.state.clone()), admin.clone(), Path(done)).await;
+        assert!(matches!(refused, Err(AppError::BadRequest(_))));
+
+        cancel(State(t.state.clone()), admin, Path(paused))
+            .await
+            .unwrap();
+        assert_eq!(testing::count(&t.state, "tts_jobs").await, 1);
+        assert_eq!(chunk_statuses(&t.state, paused).await.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn create_refuses_a_second_job_for_the_same_book() {
+        let t = testing::state().await;
+        let admin = testing::user(&t.state, "admin", true).await;
+        let book = testing::text_book(&t.state, &admin, "Книга").await;
+        testing::tts_job(&t.state, book, "failed", None, &["failed"]).await;
+
+        let res = create(State(t.state.clone()), admin, Path(book)).await;
+        assert!(matches!(res, Err(AppError::Conflict(_))));
+    }
 }

@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COALESCE(SUM(duration_sec), 0.0) FROM chapters",
+  "describe": {
+    "columns": [
+      {
+        "name": "COALESCE(SUM(duration_sec), 0.0)",
+        "ordinal": 0,
+        "type_info": "Float",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "67bc2081a2018d063432e18ca515acbc195056c7ac893cb517c9aa7bf49ec777"
+}

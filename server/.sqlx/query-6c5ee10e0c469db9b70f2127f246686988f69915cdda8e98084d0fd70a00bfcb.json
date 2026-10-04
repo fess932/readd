@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE chapters SET duration_sec = ? WHERE id = ? AND duration_sec IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "6c5ee10e0c469db9b70f2127f246686988f69915cdda8e98084d0fd70a00bfcb"
+}

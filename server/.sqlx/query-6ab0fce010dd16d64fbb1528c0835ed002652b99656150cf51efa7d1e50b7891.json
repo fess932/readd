@@ -1,0 +1,69 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT b.id, b.title, b.author, b.cover_path,\n                COUNT(ul.user_id) AS library_count\n         FROM books b\n         LEFT JOIN user_library ul ON b.id = ul.book_id\n         GROUP BY b.id\n         ORDER BY library_count DESC\n         LIMIT 5",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "author",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "author"
+          }
+        }
+      },
+      {
+        "name": "cover_path",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "cover_path"
+          }
+        }
+      },
+      {
+        "name": "library_count",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "6ab0fce010dd16d64fbb1528c0835ed002652b99656150cf51efa7d1e50b7891"
+}

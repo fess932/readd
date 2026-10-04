@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM tts_chunks WHERE job_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "1f7677e334470be54517e3f8f735a6a3ed7658ab2c3c3a3baab0c57a4ddc756b"
+}

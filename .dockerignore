@@ -1,0 +1,14 @@
+**/node_modules
+**/target
+dist
+data
+uploads
+*.db
+*.db-shm
+*.db-wal
+.git
+.github
+.claude
+**/.env
+**/.env.*
+**/.DS_Store

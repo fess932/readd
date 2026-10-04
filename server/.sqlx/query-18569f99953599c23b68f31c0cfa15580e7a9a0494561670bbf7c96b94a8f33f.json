@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT file_path, cover_path FROM text_books WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_path",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "text_books",
+            "name": "file_path"
+          }
+        }
+      },
+      {
+        "name": "cover_path",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "text_books",
+            "name": "cover_path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "18569f99953599c23b68f31c0cfa15580e7a9a0494561670bbf7c96b94a8f33f"
+}

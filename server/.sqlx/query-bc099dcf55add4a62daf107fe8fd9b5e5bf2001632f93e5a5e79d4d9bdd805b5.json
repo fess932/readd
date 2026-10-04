@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE user_library\n         SET finished_at = CASE WHEN ? THEN COALESCE(finished_at, datetime('now')) ELSE NULL END\n         WHERE user_id = ? AND book_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "bc099dcf55add4a62daf107fe8fd9b5e5bf2001632f93e5a5e79d4d9bdd805b5"
+}

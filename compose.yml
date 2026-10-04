@@ -1,0 +1,21 @@
+# docker compose up -d   → http://localhost:3000
+
+services:
+  readd:
+    image: ghcr.io/fess932/readd:latest
+    # No published image at hand? `docker compose up -d --build` builds it from this checkout.
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Signs login tokens; set your own in .env or the environment
+      JWT_SECRET: ${JWT_SECRET:-readd-secret-key}
+      # TTS server for voicing epub books; here, a service on the Docker host
+      TTS_SERVER_URL: http://host.docker.internal:8080
+      RUST_LOG: info,sqlx=warn
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Database and all uploaded and generated audio
+      - ./data:/data

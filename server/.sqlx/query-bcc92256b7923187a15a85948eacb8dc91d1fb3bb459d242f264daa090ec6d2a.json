@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO tts_chunks (job_id, seq, text, epub_chapter_idx) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "bcc92256b7923187a15a85948eacb8dc91d1fb3bb459d242f264daa090ec6d2a"
+}

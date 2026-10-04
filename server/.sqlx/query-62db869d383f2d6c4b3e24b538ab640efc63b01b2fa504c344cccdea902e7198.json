@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM tts_jobs WHERE audio_book_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "62db869d383f2d6c4b3e24b538ab640efc63b01b2fa504c344cccdea902e7198"
+}

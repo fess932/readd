@@ -1,37 +1,17 @@
 {
   "name": "readd",
   "version": "0.1.0",
+  "private": true,
   "workspaces": [
-    "src/frontend"
+    "frontend"
   ],
   "scripts": {
     "dev": "bun run dev.ts",
     "build": "bun run build.ts",
     "start": "cargo run --release --manifest-path server/Cargo.toml",
-    "server:dev": "cargo run --manifest-path server/Cargo.toml",
-    "server:build": "cargo build --release --manifest-path server/Cargo.toml",
-    "migrate": "bun run migrate.ts",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio",
-    "db:drop": "drizzle-kit drop"
-  },
-  "dependencies": {
-    "@elysiajs/cors": "^1.4.1",
-    "@elysiajs/jwt": "^1.4.1",
-    "@elysiajs/static": "^1.4.7",
-    "@types/bun": "^1.3.9",
-    "bun": "^1.3.11",
-    "busboy": "^1.6.0",
-    "drizzle-orm": "^0.45.1",
-    "elysia": "^1.4.27",
-    "music-metadata": "^11.12.1"
+    "test": "cargo test --manifest-path server/Cargo.toml && bun run --cwd frontend typecheck"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/busboy": "^1.5.4",
-    "better-sqlite3": "^12.6.2",
-    "drizzle-kit": "^0.31.9"
+    "@types/bun": "^1.4.2"
   }
 }

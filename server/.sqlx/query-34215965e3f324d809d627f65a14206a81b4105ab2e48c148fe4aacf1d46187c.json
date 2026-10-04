@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT chapter_path, position_sec FROM progress\n         WHERE user_id = ? AND book_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "chapter_path",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "progress",
+            "name": "chapter_path"
+          }
+        }
+      },
+      {
+        "name": "position_sec",
+        "ordinal": 1,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "progress",
+            "name": "position_sec"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "34215965e3f324d809d627f65a14206a81b4105ab2e48c148fe4aacf1d46187c"
+}

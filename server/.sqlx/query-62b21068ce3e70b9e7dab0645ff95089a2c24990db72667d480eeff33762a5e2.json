@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO progress (user_id, book_id, chapter_path, position_sec, updated_at)\n         VALUES (?, ?, ?, ?, datetime('now'))\n         ON CONFLICT(user_id, book_id, chapter_path) DO UPDATE SET\n           position_sec = excluded.position_sec,\n           updated_at   = datetime('now')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "62b21068ce3e70b9e7dab0645ff95089a2c24990db72667d480eeff33762a5e2"
+}

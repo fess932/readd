@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO books (title, author, narrator, file_path, cover_path, fingerprint, uploaded_by_id)\n         VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id AS \"id!\", created_at",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": [
+      null,
+      false
+    ]
+  },
+  "hash": "4f197e6d2e521d2110b3ab191650167ef080fdc2692b6f467386482f0aa88046"
+}

@@ -1,5 +1,5 @@
-use axum::{extract::State, Json};
-use serde_json::{json, Value};
+use axum::{Json, extract::State};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 use crate::{auth::Claims, error::AppError, state::AppState};
@@ -19,11 +19,10 @@ pub async fn get(
         .fetch_one(pool)
         .await?;
 
-    let total_sec: f64 = sqlx::query_scalar!(
-        "SELECT COALESCE(SUM(duration_sec), 0.0) FROM chapters"
-    )
-    .fetch_one(pool)
-    .await?;
+    let total_sec: f64 =
+        sqlx::query_scalar!("SELECT COALESCE(SUM(duration_sec), 0.0) FROM chapters")
+            .fetch_one(pool)
+            .await?;
 
     let top_books = sqlx::query!(
         "SELECT b.id, b.title, b.author, b.cover_path,
@@ -37,13 +36,15 @@ pub async fn get(
     .fetch_all(pool)
     .await?
     .into_iter()
-    .map(|r| json!({
-        "id": r.id,
-        "title": r.title,
-        "author": r.author,
-        "coverPath": r.cover_path,
-        "libraryCount": r.library_count,
-    }))
+    .map(|r| {
+        json!({
+            "id": r.id,
+            "title": r.title,
+            "author": r.author,
+            "coverPath": r.cover_path,
+            "libraryCount": r.library_count,
+        })
+    })
     .collect::<Vec<_>>();
 
     let uploaders = sqlx::query!(
@@ -56,17 +57,21 @@ pub async fn get(
     .fetch_all(pool)
     .await?
     .into_iter()
-    .map(|r| json!({
-        "name": r.name,
-        "booksCount": r.books_count,
-    }))
+    .map(|r| {
+        json!({
+            "name": r.name,
+            "booksCount": r.books_count,
+        })
+    })
     .collect::<Vec<_>>();
 
     // Personal
-    let my_books_count: i64 =
-        sqlx::query_scalar!("SELECT COUNT(*) FROM user_library WHERE user_id = ?", claims.id)
-            .fetch_one(pool)
-            .await?;
+    let my_books_count: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM user_library WHERE user_id = ?",
+        claims.id
+    )
+    .fetch_one(pool)
+    .await?;
 
     let my_listened_sec: f64 = sqlx::query_scalar!(
         "SELECT COALESCE(SUM(position_sec), 0.0) FROM progress WHERE user_id = ?",

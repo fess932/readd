@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE tts_chunks SET status = 'pending', attempts = ?, error_msg = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "ff3a1033f6d7ad9cfefe8170869a68301071b2c57841bb2fdbc58e8684cecb4e"
+}

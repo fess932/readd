@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM tts_jobs WHERE text_book_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "77836e79651c1dc94860550f31e7b38b2c64281ceca765730b1ad32a4a21347e"
+}

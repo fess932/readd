@@ -34,10 +34,13 @@ backend.exited.then((code) => {
 const frontend = Bun.spawn(["bun", join(root, "node_modules/vite/bin/vite.js")], {
   stdout: "inherit",
   stderr: "inherit",
-  cwd: join(root, "src/frontend"),
+  cwd: join(root, "frontend"),
 });
 
-setTimeout(() => Bun.spawn(["open", "http://localhost:5173"]), 2000);
+// macOS only; elsewhere open http://localhost:5173 by hand
+if (process.platform === "darwin") {
+  setTimeout(() => Bun.spawn(["open", "http://localhost:5173"]), 2000);
+}
 
 function shutdown() {
   backend.kill();

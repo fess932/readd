@@ -1,4 +1,4 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use serde::Deserialize;
 use serde_json::json;
 use sqlx::Row;
@@ -56,8 +56,7 @@ pub async fn login(
         }
     };
 
-    let token = jwt::encode_token(id, &name, final_is_admin, &state.jwt_secret)
-        .map_err(anyhow::Error::from)?;
+    let token = jwt::encode_token(id, &name, final_is_admin, &state.jwt_secret)?;
 
     Ok(Json(json!({
         "token": token,

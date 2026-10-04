@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.book_id, p.chapter_path, p.position_sec,\n                b.title, b.author, b.cover_path, p.updated_at\n         FROM progress p\n         JOIN books b ON p.book_id = b.id\n         JOIN user_library ul ON ul.user_id = p.user_id AND ul.book_id = p.book_id\n         WHERE p.user_id = ?\n         ORDER BY p.updated_at DESC\n         LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "book_id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "progress",
+            "name": "book_id"
+          }
+        }
+      },
+      {
+        "name": "chapter_path",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "progress",
+            "name": "chapter_path"
+          }
+        }
+      },
+      {
+        "name": "position_sec",
+        "ordinal": 2,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "progress",
+            "name": "position_sec"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "author",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "author"
+          }
+        }
+      },
+      {
+        "name": "cover_path",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "cover_path"
+          }
+        }
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "progress",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "28461f54c93ccbe7d1c1deab0009d0aa75edb0709a312b1fcf40a916c000b4ba"
+}

@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT j.audio_book_id, tb.title, tb.author, tb.uploaded_by_id\n         FROM tts_jobs j JOIN text_books tb ON j.text_book_id = tb.id\n         WHERE j.id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "audio_book_id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tts_jobs",
+            "name": "audio_book_id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "text_books",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "author",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "text_books",
+            "name": "author"
+          }
+        }
+      },
+      {
+        "name": "uploaded_by_id",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "text_books",
+            "name": "uploaded_by_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fbac89e4cb14600e804dd4895bd3d273b914bce191bcdbabeb77b3ad4a7f70b8"
+}

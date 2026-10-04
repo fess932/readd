@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT file_path, epub_chapter_idx, duration_sec\n         FROM tts_chunks WHERE job_id = ? AND status = 'done'\n         ORDER BY seq",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_path",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tts_chunks",
+            "name": "file_path"
+          }
+        }
+      },
+      {
+        "name": "epub_chapter_idx",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tts_chunks",
+            "name": "epub_chapter_idx"
+          }
+        }
+      },
+      {
+        "name": "duration_sec",
+        "ordinal": 2,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "tts_chunks",
+            "name": "duration_sec"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "286d028b25e3104f1f77d655283818ac157c481e04ec47b3efa43bd582e96c66"
+}

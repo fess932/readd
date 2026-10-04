@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO text_books (title, author, file_path, file_size, uploaded_by_id)\n         VALUES (?, ?, ?, ?, ?) RETURNING id AS \"id!\", created_at",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "text_books",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "text_books",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      null,
+      false
+    ]
+  },
+  "hash": "3bf67e249af00f9b27d3b5d8896313a00253293aa66167a1b9594c36f3954f21"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE tts_jobs SET status = 'running', failed_chunks = 0, error_msg = NULL,\n                             updated_at = datetime('now')\n         WHERE id = ? AND status IN ('paused', 'failed')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a913cab0cc2dc3871dee4480935bd3b29533cac0bfc59cc46fb8246ce7dab25a"
+}

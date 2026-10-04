@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE tts_jobs SET status = 'done', audio_book_id = ?, error_msg = NULL,\n                             updated_at = datetime('now')\n         WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1a12814b2476429c721433231c7e3f1ee51f4c8a0d874aedb3006066af8bed5f"
+}

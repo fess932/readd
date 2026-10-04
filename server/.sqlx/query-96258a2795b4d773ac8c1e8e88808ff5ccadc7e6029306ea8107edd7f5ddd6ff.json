@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE tts_chunks SET status = 'failed', attempts = ?, error_msg = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "96258a2795b4d773ac8c1e8e88808ff5ccadc7e6029306ea8107edd7f5ddd6ff"
+}

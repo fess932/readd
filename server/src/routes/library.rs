@@ -1,15 +1,15 @@
 use axum::{
-    extract::{Path, State},
     Json,
+    extract::{Path, State},
 };
-use serde::Serialize;
-use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 use crate::{auth::Claims, error::AppError, state::AppState};
 
-// Used for the two complex library SELECT queries (query_as skips compile-time checks)
-#[derive(sqlx::FromRow)]
+#[derive(sqlx::FromRow, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct LibBookRow {
     id: i64,
     title: String,
@@ -25,14 +25,21 @@ struct LibBookRow {
     total_sec: Option<f64>,
 }
 
-const LIB_SELECT: &str =
-    "SELECT b.id, b.title, b.author, b.narrator, b.cover_path, b.file_path,
-            u.name AS uploaded_by, ul.added_at, ul.finished_at, b.created_at,
-            (SELECT COUNT(*) FROM chapters WHERE book_id = b.id) AS chapters_count,
-            (SELECT SUM(duration_sec) FROM chapters WHERE book_id = b.id) AS total_sec
-     FROM user_library ul
-     JOIN books b ON ul.book_id = b.id
-     LEFT JOIN users u ON b.uploaded_by_id = u.id";
+/// The library SELECT with `$tail` appended; a macro so that the SQL stays a string literal.
+macro_rules! lib_select {
+    ($tail:literal) => {
+        concat!(
+            "SELECT b.id, b.title, b.author, b.narrator, b.cover_path, b.file_path,
+                    u.name AS uploaded_by, ul.added_at, ul.finished_at, b.created_at,
+                    (SELECT COUNT(*) FROM chapters WHERE book_id = b.id) AS chapters_count,
+                    (SELECT SUM(duration_sec) FROM chapters WHERE book_id = b.id) AS total_sec
+             FROM user_library ul
+             JOIN books b ON ul.book_id = b.id
+             LEFT JOIN users u ON b.uploaded_by_id = u.id ",
+            $tail
+        )
+    };
+}
 
 #[derive(sqlx::FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,66 +58,60 @@ struct ProgressRow {
     position_sec: f64,
 }
 
-async fn book_chapters(
+/// A library entry as the client sees it: the book, its chapters and where the user stopped.
+#[derive(Serialize)]
+struct LibraryBook {
+    #[serde(flatten)]
+    book: LibBookRow,
+    chapters: Vec<ChapterRow>,
+    progress: Option<ProgressRow>,
+}
+
+async fn with_details(
     pool: &sqlx::SqlitePool,
-    book_id: i64,
-) -> Result<Vec<ChapterRow>, sqlx::Error> {
-    sqlx::query_as::<_, ChapterRow>(
+    user_id: i64,
+    book: LibBookRow,
+) -> Result<LibraryBook, sqlx::Error> {
+    let chapters = sqlx::query_as::<_, ChapterRow>(
         "SELECT id, file_path, sort_order, duration_sec FROM chapters
          WHERE book_id = ? ORDER BY sort_order ASC",
     )
-    .bind(book_id)
+    .bind(book.id)
     .fetch_all(pool)
-    .await
-}
+    .await?;
 
-async fn book_progress(
-    pool: &sqlx::SqlitePool,
-    user_id: i64,
-    book_id: i64,
-) -> Result<Option<ProgressRow>, sqlx::Error> {
-    sqlx::query_as::<_, ProgressRow>(
+    // The chapter listened to most recently
+    let progress = sqlx::query_as::<_, ProgressRow>(
         "SELECT book_id, chapter_path, position_sec FROM progress
          WHERE user_id = ? AND book_id = ?
          ORDER BY updated_at DESC LIMIT 1",
     )
     .bind(user_id)
-    .bind(book_id)
+    .bind(book.id)
     .fetch_optional(pool)
-    .await
+    .await?;
+
+    Ok(LibraryBook {
+        book,
+        chapters,
+        progress,
+    })
 }
 
 pub async fn list(
     State(state): State<Arc<AppState>>,
     claims: Claims,
 ) -> Result<Json<Value>, AppError> {
-    let books = sqlx::query_as::<_, LibBookRow>(
-        &format!("{} WHERE ul.user_id = ? ORDER BY ul.added_at DESC", LIB_SELECT),
-    )
+    let books = sqlx::query_as::<_, LibBookRow>(lib_select!(
+        "WHERE ul.user_id = ? ORDER BY ul.added_at DESC"
+    ))
     .bind(claims.id)
     .fetch_all(&state.pool)
     .await?;
 
     let mut result = Vec::with_capacity(books.len());
-    for b in books {
-        let chapters = book_chapters(&state.pool, b.id).await?;
-        let progress = book_progress(&state.pool, claims.id, b.id).await?;
-        result.push(json!({
-            "id": b.id,
-            "title": b.title,
-            "author": b.author,
-            "narrator": b.narrator,
-            "coverPath": b.cover_path,
-            "filePath": b.file_path,
-            "uploadedBy": b.uploaded_by,
-            "createdAt": b.created_at,
-            "addedAt": b.added_at,
-            "finishedAt": b.finished_at,
-            "chaptersCount": b.chapters_count,
-            "totalSec": b.total_sec,
-            "chapters": chapters,
-            "progress": progress,
-        }));
+    for book in books {
+        result.push(with_details(&state.pool, claims.id, book).await?);
     }
     Ok(Json(json!(result)))
 }
@@ -120,37 +121,16 @@ pub async fn get(
     claims: Claims,
     Path(book_id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
-    let b = sqlx::query_as::<_, LibBookRow>(
-        &format!(
-            "{} WHERE ul.user_id = ? AND b.id = ?",
-            LIB_SELECT
-        ),
-    )
-    .bind(claims.id)
-    .bind(book_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or(AppError::NotFound)?;
+    let book = sqlx::query_as::<_, LibBookRow>(lib_select!("WHERE ul.user_id = ? AND b.id = ?"))
+        .bind(claims.id)
+        .bind(book_id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or(AppError::NotFound)?;
 
-    let chapters = book_chapters(&state.pool, b.id).await?;
-    let progress = book_progress(&state.pool, claims.id, b.id).await?;
-
-    Ok(Json(json!({
-        "id": b.id,
-        "title": b.title,
-        "author": b.author,
-        "narrator": b.narrator,
-        "coverPath": b.cover_path,
-        "filePath": b.file_path,
-        "uploadedBy": b.uploaded_by,
-        "createdAt": b.created_at,
-        "addedAt": b.added_at,
-        "finishedAt": b.finished_at,
-        "chaptersCount": b.chapters_count,
-        "totalSec": b.total_sec,
-        "chapters": chapters,
-        "progress": progress,
-    })))
+    Ok(Json(json!(
+        with_details(&state.pool, claims.id, book).await?
+    )))
 }
 
 pub async fn add(
@@ -176,37 +156,31 @@ pub async fn add(
     Ok(Json(json!({ "ok": true })))
 }
 
+#[derive(Deserialize)]
+pub struct FinishBody {
+    pub finished: bool,
+}
+
 pub async fn finish(
     State(state): State<Arc<AppState>>,
     claims: Claims,
     Path(book_id): Path<i64>,
+    Json(body): Json<FinishBody>,
 ) -> Result<Json<Value>, AppError> {
-    // Toggle: if already finished → clear, else set now
-    let current = sqlx::query_scalar!(
-        "SELECT finished_at FROM user_library WHERE user_id = ? AND book_id = ?",
-        claims.id, book_id
+    let rows = sqlx::query!(
+        "UPDATE user_library
+         SET finished_at = CASE WHEN ? THEN COALESCE(finished_at, datetime('now')) ELSE NULL END
+         WHERE user_id = ? AND book_id = ?",
+        body.finished,
+        claims.id,
+        book_id
     )
-    .fetch_optional(&state.pool)
-    .await?;
+    .execute(&state.pool)
+    .await?
+    .rows_affected();
 
-    match current {
-        None => return Err(AppError::NotFound),
-        Some(Some(_)) => {
-            sqlx::query!(
-                "UPDATE user_library SET finished_at = NULL WHERE user_id = ? AND book_id = ?",
-                claims.id, book_id
-            )
-            .execute(&state.pool)
-            .await?;
-        }
-        Some(None) => {
-            sqlx::query!(
-                "UPDATE user_library SET finished_at = datetime('now') WHERE user_id = ? AND book_id = ?",
-                claims.id, book_id
-            )
-            .execute(&state.pool)
-            .await?;
-        }
+    if rows == 0 {
+        return Err(AppError::NotFound);
     }
 
     Ok(Json(json!({ "ok": true })))
@@ -226,4 +200,97 @@ pub async fn remove(
     .await?;
 
     Ok(Json(json!({ "ok": true })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing;
+
+    async fn finished_at(state: &AppState, book_id: i64) -> Option<String> {
+        sqlx::query_scalar("SELECT finished_at FROM user_library WHERE book_id = ?")
+            .bind(book_id)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn finish_is_idempotent_and_can_be_undone() {
+        let t = testing::state().await;
+        let user = testing::user(&t.state, "u", false).await;
+        let id = testing::book(&t.state, &user, "Книга", &["1.mp3"]).await;
+        testing::add_to_library(&t.state, &user, id).await;
+        let set = |finished| {
+            finish(
+                State(t.state.clone()),
+                user.clone(),
+                Path(id),
+                Json(FinishBody { finished }),
+            )
+        };
+
+        set(true).await.unwrap();
+        let first = finished_at(&t.state, id).await;
+        assert!(first.is_some());
+
+        // the player reports the end of the book again: still finished, same timestamp
+        set(true).await.unwrap();
+        assert_eq!(finished_at(&t.state, id).await, first);
+
+        set(false).await.unwrap();
+        assert_eq!(finished_at(&t.state, id).await, None);
+    }
+
+    #[tokio::test]
+    async fn finish_needs_the_book_in_the_library() {
+        let t = testing::state().await;
+        let user = testing::user(&t.state, "u", false).await;
+        let id = testing::book(&t.state, &user, "Книга", &["1.mp3"]).await;
+
+        let res = finish(
+            State(t.state.clone()),
+            user,
+            Path(id),
+            Json(FinishBody { finished: true }),
+        )
+        .await;
+        assert!(matches!(res, Err(AppError::NotFound)));
+    }
+
+    #[tokio::test]
+    async fn list_returns_chapters_in_order_with_latest_progress() {
+        let t = testing::state().await;
+        let user = testing::user(&t.state, "u", false).await;
+        let id = testing::book(&t.state, &user, "Книга", &["1.mp3", "2.mp3"]).await;
+        add(State(t.state.clone()), user.clone(), Path(id))
+            .await
+            .unwrap();
+        add(State(t.state.clone()), user.clone(), Path(id))
+            .await
+            .unwrap(); // adding twice is fine
+        sqlx::query("INSERT INTO progress (user_id, book_id, chapter_path, position_sec) VALUES (?, ?, ?, 42)")
+            .bind(user.id)
+            .bind(id)
+            .bind(format!("book-{id}/2.mp3"))
+            .execute(&t.state.pool)
+            .await
+            .unwrap();
+
+        let Json(books) = list(State(t.state.clone()), user).await.unwrap();
+
+        assert_eq!(books.as_array().unwrap().len(), 1);
+        let paths: Vec<&str> = books[0]["chapters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["filePath"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            paths,
+            [format!("book-{id}/1.mp3"), format!("book-{id}/2.mp3")]
+        );
+        assert_eq!(books[0]["progress"]["positionSec"], 42.0);
+        assert_eq!(books[0]["finishedAt"], Value::Null);
+    }
 }

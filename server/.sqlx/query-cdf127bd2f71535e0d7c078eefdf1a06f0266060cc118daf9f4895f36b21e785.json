@@ -1,0 +1,33 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT u.name, COUNT(b.id) AS books_count\n         FROM users u\n         INNER JOIN books b ON b.uploaded_by_id = u.id\n         GROUP BY u.id\n         ORDER BY books_count DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "books_count",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "cdf127bd2f71535e0d7c078eefdf1a06f0266060cc118daf9f4895f36b21e785"
+}

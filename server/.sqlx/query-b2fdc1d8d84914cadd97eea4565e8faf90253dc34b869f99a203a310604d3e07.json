@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\", audio_ext FROM tts_jobs WHERE status = 'running' ORDER BY id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tts_jobs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "audio_ext",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tts_jobs",
+            "name": "audio_ext"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b2fdc1d8d84914cadd97eea4565e8faf90253dc34b869f99a203a310604d3e07"
+}

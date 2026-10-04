@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE tts_jobs SET done_chunks = done_chunks + 1,\n                                     audio_ext = ?,\n                                     error_msg = NULL,\n                                     updated_at = datetime('now')\n                 WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1f420f739a54a490152da4a8a6f7bb70ffb49ffb7c86a46c8cd58e367121315e"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT b.author FROM user_library ul\n         JOIN books b ON ul.book_id = b.id\n         WHERE ul.user_id = ?\n         GROUP BY b.author\n         ORDER BY COUNT(*) DESC\n         LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "author",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "books",
+            "name": "author"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3109059d0874f3fcac595c629560eeffb6a60ae82832acac05362bbf543d55d7"
+}

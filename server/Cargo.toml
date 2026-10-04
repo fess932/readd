@@ -1,28 +1,31 @@
 [package]
 name = "readd-server"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+rust-version = "1.88"
 
 [dependencies]
-axum = { version = "0.8.8", features = ["multipart"] }
-tokio = { version = "1.51.1", features = ["full"] }
-sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
-# libsqlite3-sys = { version = "0.36.0", features = ["bundled"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"], default-features = false }
-tower-http = { version = "0.6.8", features = ["cors", "fs", "trace"] }
-anyhow = "1"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
-tokio-util = { version = "0.7", features = ["io"] }
-symphonia = { version = "0.5.5", features = ["mp3", "aac", "ogg", "flac", "wav", "isomp4"] }
-wyhash = "0.6"
-futures-util = "0.3"
-mime_guess = "2"
-reqwest = { version = "0.13.2", features = ["json"] }
-zip = "8.5.1"
+anyhow = "1.0.104"
+axum = { version = "0.8.9", features = ["multipart"] }
+encoding_rs = "0.8.42"
+futures-util = "0.3.34"
+jsonwebtoken = { version = "11.1.0", features = ["aws_lc_rs"], default-features = false }
+reqwest = { version = "0.13.5", features = ["json"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sqlx = { version = "0.9.0", features = ["sqlite", "runtime-tokio"] }
+symphonia = { version = "0.6.1", features = ["mp3", "aac", "ogg", "flac", "wav", "isomp4"] }
+tokio = { version = "1.53.2", features = ["full"] }
+tokio-util = { version = "0.7.19", features = ["io"] }
 tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.7.1", features = ["cors", "fs", "trace"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+wyhash = "0.6.0"
+zip = "8.6.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"
 
 [profile.release]
 opt-level = 3
