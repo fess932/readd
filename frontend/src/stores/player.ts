@@ -20,11 +20,15 @@ export const player = reactive({
   speed: Number(localStorage.getItem('readd_speed')) || 1,
 });
 
-/** A chapter counts as listened to when this close to its end. */
+/**
+ * A chapter counts as listened to when this close to its end: a few seconds,
+ * but never more than a tenth of the chapter, so that short ones can be resumed too.
+ */
 const FINISHED_MARGIN_SEC = 6;
 
 export function isChapterFinished(positionSec: number, durationSec: number | null | undefined): boolean {
-  return !!durationSec && positionSec >= durationSec - FINISHED_MARGIN_SEC;
+  if (!durationSec) return false;
+  return positionSec >= durationSec - Math.min(FINISHED_MARGIN_SEC, durationSec / 10);
 }
 
 /** Switches to a chapter of the current book and starts playing it. */
