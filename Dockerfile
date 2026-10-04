@@ -19,8 +19,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/server
 COPY server .
-# SQL is checked against the committed .sqlx cache (see server/.cargo/config.toml),
-# so the build needs no database.
+# SQL is checked against the committed .sqlx cache, so the build needs no database
+ENV SQLX_OFFLINE=true
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/server/target \
     cargo build --release --locked \

@@ -1,4 +1,0 @@
-# Queries are checked against the committed .sqlx cache, not a live database.
-# After changing a query or a migration: see README, "Запросы и миграции".
-[env]
-SQLX_OFFLINE = "true"
