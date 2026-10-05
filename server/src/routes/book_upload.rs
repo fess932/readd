@@ -5,23 +5,25 @@
 //! client opens an upload, sends each file in its own request — which it can retry —
 //! and then asks to turn the uploaded files into a book.
 //!
-//! An upload is the future book directory with a marker file in it; parts are stored
-//! as `<index>.part` and get their real names when the upload is finished.
+//! An upload is the future book directory with a marker file in it; files are stored
+//! as `<index>.part`, arrive in pieces, and get their real names when the upload is finished.
 
 use axum::{
     Json,
     body::Body,
-    extract::{Path, State},
+    extract::{Path, Query, State},
 };
 use futures_util::TryStreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
     collections::HashSet,
+    io::SeekFrom,
     path::{Path as FsPath, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
 };
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio_util::io::StreamReader;
 
 use super::books::fingerprint;
@@ -69,37 +71,45 @@ pub async fn start(
     Ok(Json(json!({ "uploadId": upload_id })))
 }
 
-/// PUT /api/books/uploads/:id/files/:index — one file, as the raw request body.
-/// Sending the same index again replaces the part, so the client can simply retry.
+#[derive(Deserialize)]
+pub struct ChunkQuery {
+    /// Where in the file this piece starts; 0 when absent.
+    #[serde(default)]
+    pub offset: u64,
+}
+
+/// PUT /api/books/uploads/:id/files/:index?offset=N — a piece of one file, as the raw body.
+///
+/// Files are sent in pieces because proxies cap the size of a request (Cloudflare: 100 MB).
+/// A piece is written at its offset, so sending the same one again is harmless and the
+/// client can simply retry; offset 0 starts the file over. Whether a file arrived whole
+/// is decided when the upload is finished, by its size.
 pub async fn put_file(
     State(state): State<Arc<AppState>>,
     _claims: Claims,
     Path((upload_id, index)): Path<(String, u32)>,
+    Query(chunk): Query<ChunkQuery>,
     body: Body,
 ) -> Result<Json<Value>, AppError> {
     let dir = upload_dir(&state.uploads_dir, &upload_id)?;
 
-    // Written under a temporary name: a part that exists is a part that arrived whole
-    let incoming = dir.join(format!("{index}.incoming"));
-    let mut out = tokio::fs::File::create(&incoming).await?;
+    let mut out = tokio::fs::File::options()
+        .create(true)
+        .write(true)
+        .truncate(chunk.offset == 0)
+        .open(part_path(&dir, index))
+        .await?;
+    out.seek(SeekFrom::Start(chunk.offset)).await?;
+
     let stream = body
         .into_data_stream()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::BrokenPipe, e.to_string()));
-    let copied = tokio::io::copy(&mut StreamReader::new(stream), &mut out).await;
-    drop(out);
+    let written = tokio::io::copy(&mut StreamReader::new(stream), &mut out)
+        .await
+        .map_err(|e| AppError::BadRequest(format!("передача файла прервана: {e}")))?;
+    out.flush().await?;
 
-    match copied {
-        Ok(size) => {
-            tokio::fs::rename(&incoming, part_path(&dir, index)).await?;
-            Ok(Json(json!({ "ok": true, "size": size })))
-        }
-        Err(e) => {
-            tokio::fs::remove_file(&incoming).await.ok();
-            Err(AppError::BadRequest(format!(
-                "передача файла прервана: {e}"
-            )))
-        }
-    }
+    Ok(Json(json!({ "ok": true, "size": chunk.offset + written })))
 }
 
 /// DELETE /api/books/uploads/:id — give up on an upload
@@ -388,6 +398,25 @@ mod tests {
         res["uploadId"].as_str().unwrap().to_string()
     }
 
+    async fn put_at(
+        t: &testing::TestState,
+        user: &Claims,
+        id: &str,
+        index: u32,
+        offset: u64,
+        bytes: &'static [u8],
+    ) {
+        put_file(
+            State(t.state.clone()),
+            user.clone(),
+            Path((id.to_string(), index)),
+            Query(ChunkQuery { offset }),
+            Body::from(bytes),
+        )
+        .await
+        .unwrap();
+    }
+
     async fn put(
         t: &testing::TestState,
         user: &Claims,
@@ -395,14 +424,7 @@ mod tests {
         index: u32,
         bytes: &'static [u8],
     ) {
-        put_file(
-            State(t.state.clone()),
-            user.clone(),
-            Path((id.to_string(), index)),
-            Body::from(bytes),
-        )
-        .await
-        .unwrap();
+        put_at(t, user, id, index, 0, bytes).await;
     }
 
     fn file(index: u32, name: &str, size: u64) -> UploadedFile {
@@ -486,6 +508,42 @@ mod tests {
         // finished: no longer an upload
         let again = cancel(State(t.state.clone()), user, Path(id)).await;
         assert!(matches!(again, Err(AppError::NotFound)));
+    }
+
+    #[tokio::test]
+    async fn a_file_arrives_in_pieces_and_a_piece_can_be_sent_again() {
+        let t = testing::state().await;
+        let user = testing::user(&t.state, "u", false).await;
+        let id = start_upload(&t, &user).await;
+
+        put_at(&t, &user, &id, 0, 0, b"aaaa").await;
+        put_at(&t, &user, &id, 0, 4, b"bb").await; // connection dropped mid-piece…
+        put_at(&t, &user, &id, 0, 4, b"bbbb").await; // …the piece is sent again
+        put_at(&t, &user, &id, 0, 8, b"cc").await;
+
+        finish(
+            State(t.state.clone()),
+            user.clone(),
+            Path(id.clone()),
+            finish_body(vec![file(0, "a/1.mp3", 10)]),
+        )
+        .await
+        .unwrap();
+        let saved = std::fs::read(t.state.uploads_dir.join(&id).join("1.mp3")).unwrap();
+        assert_eq!(saved, b"aaaabbbbcc");
+    }
+
+    #[tokio::test]
+    async fn starting_a_file_over_discards_what_was_there() {
+        let t = testing::state().await;
+        let user = testing::user(&t.state, "u", false).await;
+        let id = start_upload(&t, &user).await;
+
+        put_at(&t, &user, &id, 0, 0, b"a much longer first attempt").await;
+        put_at(&t, &user, &id, 0, 0, b"short").await;
+
+        let part = std::fs::read(part_path(&t.state.uploads_dir.join(&id), 0)).unwrap();
+        assert_eq!(part, b"short");
     }
 
     #[tokio::test]

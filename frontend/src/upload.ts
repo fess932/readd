@@ -3,6 +3,9 @@
 // One request for a whole book (a gigabyte) dies with any hiccup on the way and the
 // browser will not say why. Separate requests can be retried one by one, a stalled one
 // can be detected and restarted, and a failure can name the file and the reason.
+//
+// Files themselves are cut into pieces: proxies cap the size of a request
+// (Cloudflare at 100 MB), and a long chapter is easily bigger than that.
 
 import { API_BASE, request, type Book } from './api';
 import { auth } from './stores/auth';
@@ -10,7 +13,9 @@ import { formatSize } from './utils/format';
 
 /** Files in flight at once: enough to keep the line busy, few enough not to choke it. */
 const PARALLEL = 3;
-/** Pauses before the 2nd, 3rd and 4th try of a file. */
+/** A file goes up in pieces of this size: under Cloudflare's 100 MB cap, with room to spare. */
+const CHUNK_BYTES = 64 * 1024 * 1024;
+/** Pauses before the 2nd, 3rd and 4th try of a piece. */
 const RETRY_DELAYS_MS = [1000, 3000, 8000];
 /** No bytes moving for this long means the request is stuck. */
 const STALL_MS = 30_000;
@@ -38,8 +43,8 @@ type Failure =
 const pathOf = (file: File) => file.webkitRelativePath || file.name;
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-/** Sends one file as the body of a PUT. Rejects with a `Failure`. */
-function putFile(url: string, file: File, onSent: (bytes: number) => void, signal: AbortSignal): Promise<void> {
+/** Sends one piece as the body of a PUT. Rejects with a `Failure`. */
+function putChunk(url: string, chunk: Blob, onSent: (bytes: number) => void, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     let failure: Failure = { kind: 'network' };
@@ -79,11 +84,11 @@ function putFile(url: string, file: File, onSent: (bytes: number) => void, signa
     signal.addEventListener('abort', onCancel);
     if (signal.aborted) return onCancel();
     armWatchdog();
-    xhr.send(file);
+    xhr.send(chunk);
   });
 }
 
-/** Whether trying the same file again can help. */
+/** Whether trying the same piece again can help. */
 function isRetryable(failure: Failure): boolean {
   if (failure.kind === 'cancelled') return false;
   if (failure.kind === 'http') return failure.status >= 500 || failure.status === 408 || failure.status === 429;
@@ -98,7 +103,7 @@ async function describe(file: File, failure: Failure, sentBytes: number): Promis
 
   if (failure.kind === 'http') {
     if (failure.status === 413) {
-      return `${name} (${formatSize(file.size)}): прокси перед сервером не пропускает запросы такого размера (413)`;
+      return `${name}: прокси перед сервером не пропускает запросы даже по ${formatSize(CHUNK_BYTES)} (413)`;
     }
     return `${name}: сервер ответил ${failure.status} — ${failure.message || 'без пояснения'}`;
   }
@@ -140,14 +145,15 @@ export async function uploadBook(
   const onCancel = () => stopOthers.abort();
   signal.addEventListener('abort', onCancel);
 
-  async function sendWithRetries(index: number) {
+  /** Sends one piece, retrying it until it goes through or retrying stops making sense. */
+  async function sendChunk(index: number, offset: number) {
     const file = files[index];
+    const chunk = file.slice(offset, offset + CHUNK_BYTES);
+    const url = `${base}/files/${index}?offset=${offset}`;
+
     for (let attempt = 0; ; attempt++) {
       try {
-        await putFile(`${base}/files/${index}`, file, (bytes) => { sent[index] = bytes; report(); }, stopOthers.signal);
-        sent[index] = file.size;
-        filesDone++;
-        report();
+        await putChunk(url, chunk, (bytes) => { sent[index] = offset + bytes; report(); }, stopOthers.signal);
         return;
       } catch (err) {
         const failure = err as Failure;
@@ -155,7 +161,7 @@ export async function uploadBook(
           if (failure.kind === 'cancelled') throw new Error('Загрузка отменена');
           throw new Error(await describe(file, failure, sent[index]));
         }
-        sent[index] = 0;
+        sent[index] = offset;
         report();
         await sleep(RETRY_DELAYS_MS[attempt]);
         if (stopOthers.signal.aborted) throw new Error('Загрузка отменена');
@@ -163,11 +169,22 @@ export async function uploadBook(
     }
   }
 
+  async function sendFile(index: number) {
+    const size = files[index].size;
+    // An empty file still has to be created on the server: one empty piece
+    for (let offset = 0; offset === 0 || offset < size; offset += CHUNK_BYTES) {
+      await sendChunk(index, offset);
+    }
+    sent[index] = size;
+    filesDone++;
+    report();
+  }
+
   try {
     // A fixed number of workers pull files off a shared queue
     let next = 0;
     const worker = async () => {
-      while (next < files.length) await sendWithRetries(next++);
+      while (next < files.length) await sendFile(next++);
     };
     await Promise.all(Array.from({ length: Math.min(PARALLEL, files.length) }, worker));
 
